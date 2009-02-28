@@ -1,0 +1,112 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>9.0.30729</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{DE95A8DE-163E-4F3F-8EE8-34AFE14BFD48}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Microsoft.Samples.Debugging</RootNamespace>
+    <AssemblyName>CorDebug</AssemblyName>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="CorDebug\AppDomain.cs" />
+    <Compile Include="CorDebug\AppDomainEnumerator.cs" />
+    <Compile Include="CorDebug\Assembly.cs" />
+    <Compile Include="CorDebug\AssemblyEnumerator.cs" />
+    <Compile Include="CorDebug\Breakpoint.cs" />
+    <Compile Include="CorDebug\BreakpointEnumerator.cs" />
+    <Compile Include="CorDebug\ChainEnumerator.cs" />
+    <Compile Include="CorDebug\Class.cs" />
+    <Compile Include="CorDebug\Constants.cs" />
+    <Compile Include="CorDebug\Controller.cs" />
+    <Compile Include="CorDebug\Debugger.cs" />
+    <Compile Include="CorDebug\ErrorInfoEnumerator.cs" />
+    <Compile Include="CorDebug\Eval.cs" />
+    <Compile Include="CorDebug\FunctionBreakpoint.cs" />
+    <Compile Include="CorDebug\HResults.cs" />
+    <Compile Include="CorDebug\Module.cs" />
+    <Compile Include="CorDebug\ModuleBreakpoint.cs" />
+    <Compile Include="CorDebug\ModuleEnumerator.cs" />
+    <Compile Include="CorDebug\NativeApi\ICorDebugWrappers.cs" />
+    <Compile Include="CorDebug\ObjectEnumerator.cs" />
+    <Compile Include="CorDebug\Process.cs" />
+    <Compile Include="CorDebug\ProcessEnumerator.cs" />
+    <Compile Include="CorDebug\RegisterSet.cs" />
+    <Compile Include="CorDebug\Stepper.cs" />
+    <Compile Include="CorDebug\StepperEnumerator.cs" />
+    <Compile Include="CorDebug\Thread.cs" />
+    <Compile Include="CorDebug\ThreadEnumerator.cs" />
+    <Compile Include="CorDebug\Type.cs" />
+    <Compile Include="CorDebug\TypeEnumerator.cs" />
+    <Compile Include="CorDebug\Value.cs" />
+    <Compile Include="CorDebug\ValueBreakpoint.cs" />
+    <Compile Include="CorDebug\WrapperBase.cs" />
+    <Compile Include="CorMetadata\CorMetadata.cs" />
+    <Compile Include="CorMetadata\MetadataFieldInfo.cs" />
+    <Compile Include="CorMetadata\MetadataParameterInfo.cs" />
+    <Compile Include="CorMetadata\MetadataType.cs" />
+    <Compile Include="CorPublish\CorPublish.cs" />
+    <Compile Include="CorPublish\NativeApi\ICorPublishWrappers.cs" />
+    <Compile Include="CorMetadata\NativeApi\IMetadataImport.cs" />
+    <Compile Include="CorDebug\NativeApi\WindowsImports.cs" />
+    <Compile Include="CorSymbolStore\ISymBinder2.cs" />
+    <Compile Include="CorSymbolStore\ISymConstant.cs" />
+    <Compile Include="CorSymbolStore\ISymEncMethod.cs" />
+    <Compile Include="CorSymbolStore\ISymENCUpdate.cs" />
+    <Compile Include="CorSymbolStore\ISymReader2.cs" />
+    <Compile Include="CorSymbolStore\ISymScope2.cs" />
+    <Compile Include="CorSymbolStore\ISymSearchInfo.cs" />
+    <Compile Include="CorSymbolStore\ISymWriter2.cs" />
+    <Compile Include="CorSymbolStore\SymAccess.cs" />
+    <Compile Include="CorSymbolStore\symbinder.cs" />
+    <Compile Include="CorSymbolStore\SymConstant.cs" />
+    <Compile Include="CorSymbolStore\SymDocument.cs" />
+    <Compile Include="CorSymbolStore\SymDocumentWriter.cs" />
+    <Compile Include="CorSymbolStore\symmethod.cs" />
+    <Compile Include="CorSymbolStore\SymNamespace.cs" />
+    <Compile Include="CorSymbolStore\SymReader.cs" />
+    <Compile Include="CorSymbolStore\SymScope.cs" />
+    <Compile Include="CorSymbolStore\SymSearchInfo.cs" />
+    <Compile Include="CorSymbolStore\SymSearchPolicyAttributes.cs" />
+    <Compile Include="CorSymbolStore\symvariable.cs" />
+    <Compile Include="CorSymbolStore\SymWriter.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+  <PropertyGroup>
+    <PostBuildEvent>copy $(TargetPath) $(ProjectDir)\..</PostBuildEvent>
+  </PropertyGroup>
+</Project>
