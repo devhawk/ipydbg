@@ -20,7 +20,8 @@ cmd_line = "\"%s\" -D \"%s\"" % (ipy, py_file)
 evt = AutoResetEvent(False)
 sym_binder = SymbolBinder()
 initial_breakpoint = None
-  
+symbol_readers = dict()
+
 class sequence_point(object):
   def __init__(self, offset, doc, start_line, start_col, end_line, end_col):
     self.offset = offset
@@ -43,6 +44,26 @@ def get_sequence_points(method):
   for i in range(method.SequencePointCount):
     yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], spStartCol[i], spEndLines[i], spEndCol[i])
 
+def get_location(reader, thread):
+  frame = thread.ActiveFrame
+  function = frame.Function
+  
+  offset, mapping_result = frame.GetIP()
+  method = reader.GetMethod(SymbolToken(frame.Function.Token))
+  
+  real_sp = None
+  for sp in get_sequence_points(method):
+    if sp.offset > offset: 
+      break
+    if sp.start_line != 0xfeefee: 
+      real_sp = sp
+      
+  if real_sp == None:
+    return "Location (offset %d)" % (offset)
+  
+  return "Location %s:%d (offset %d)" % (
+    Path.GetFileName(real_sp.doc.URL), real_sp.start_line, offset)
+  
 def create_breakpoint(doc, line, module, reader):
   line = doc.FindClosestLine(line)
   method = reader.GetMethodFromDocumentPosition(doc, line, 0)
@@ -72,6 +93,9 @@ def OnUpdateModuleSymbols(s,e):
   metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()
   reader = sym_binder.GetReaderFromStream(metadata_import, e.Stream)
  
+  global symbol_readers
+  symbol_readers[e.Module] = reader
+  
   global initial_breakpoint
   if initial_breakpoint != None:
     return
@@ -84,7 +108,8 @@ def OnUpdateModuleSymbols(s,e):
       initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
 
 def OnBreakpoint(s,e):
-  print "OnBreakpoint"
+  print "OnBreakpoint", get_location(
+    symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)
   
 debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
 process = debugger.CreateProcess(ipy, cmd_line)
