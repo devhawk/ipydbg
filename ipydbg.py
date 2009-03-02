@@ -83,13 +83,16 @@ def OnUpdateModuleSymbols(s,e):
     if str.Compare(full_path, Path.GetFullPath(doc.URL), True) == 0:
       initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
 
+def OnBreakpoint(s,e):
+  print "OnBreakpoint"
+  
 debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
 process = debugger.CreateProcess(ipy, cmd_line)
 
 process.OnCreateAppDomain += OnCreateAppDomain
 process.OnProcessExit += OnProcessExit
 process.OnUpdateModuleSymbols += OnUpdateModuleSymbols
-
+process.OnBreakpoint += OnBreakpoint
 process.Continue(False)
 
 evt.WaitOne()
