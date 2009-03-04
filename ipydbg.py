@@ -66,7 +66,7 @@ def get_location(reader, thread):
   
   return "Location %s:%d (offset %d)" % (
     Path.GetFileName(real_sp.doc.URL), real_sp.start_line, offset)
-  
+
 def create_breakpoint(doc, line, module, reader):
   line = doc.FindClosestLine(line)
   method = reader.GetMethodFromDocumentPosition(doc, line, 0)
@@ -113,9 +113,21 @@ def OnUpdateModuleSymbols(s,e):
 def OnBreakpoint(s,e):
   print "OnBreakpoint", get_location(
     symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)
+  
+  do_break_event(e)
+
+def OnStepComplete(s,e):
+  print "OnStepComplete", e.StepReason, get_location(
+      symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)
+      
+  do_break_event(e)
+  
+def do_break_event(e):
+  global active_thread
+  active_thread = e.Thread
   e.Continue = False
   break_event.Set()
-
+  
 def input():
   while True:
     Console.Write("» ")
@@ -139,6 +151,7 @@ process.OnCreateAppDomain += OnCreateAppDomain
 process.OnProcessExit += OnProcessExit
 process.OnUpdateModuleSymbols += OnUpdateModuleSymbols
 process.OnBreakpoint += OnBreakpoint
+process.OnStepComplete += OnStepComplete
 
 handles = Array.CreateInstance(WaitHandle, 2)
 handles[0] = terminate_event
@@ -153,3 +166,4 @@ while True:
 
   input()
   
+
