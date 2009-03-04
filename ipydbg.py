@@ -123,18 +123,14 @@ def input():
     
     if k.Key == ConsoleKey.Spacebar:
       Console.WriteLine("\nContinuing")
-      return False
-    if k.Key == ConsoleKey.Q:
+      return
+    elif k.Key == ConsoleKey.Q:
       Console.WriteLine("\nQuitting")
+      process.Stop(0)
       process.Terminate(255)
-      return True
+      return
     else:
-      Console.WriteLine()
-      
-      
-    
-    
-    
+      Console.WriteLine("\n Please enter a valid command")
 
 debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
 process = debugger.CreateProcess(ipy, cmd_line)
@@ -155,6 +151,5 @@ while True:
   if i == 0:
     break
 
-  if input():
-    break
+  input()
   
