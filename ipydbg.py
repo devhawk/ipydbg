@@ -17,7 +17,9 @@ ipy = Assembly.GetEntryAssembly().Location
 py_file = sys.argv[1]
 cmd_line = "\"%s\" -D \"%s\"" % (ipy, py_file)
 
-evt = AutoResetEvent(False)
+terminate_event = AutoResetEvent(False)
+break_event = AutoResetEvent(False)
+
 sym_binder = SymbolBinder()
 initial_breakpoint = None
 symbol_readers = dict()
@@ -85,7 +87,7 @@ def OnCreateAppDomain(s,e):
   
 def OnProcessExit(s,e):
   print "OnProcessExit"
-  evt.Set()
+  terminate_event.Set()
 
 def OnUpdateModuleSymbols(s,e):
   print "OnUpdateModuleSymbols"
@@ -110,6 +112,7 @@ def OnUpdateModuleSymbols(s,e):
 def OnBreakpoint(s,e):
   print "OnBreakpoint", get_location(
     symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)
+  break_event.Set()
   
 debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
 process = debugger.CreateProcess(ipy, cmd_line)
@@ -118,6 +121,18 @@ process.OnCreateAppDomain += OnCreateAppDomain
 process.OnProcessExit += OnProcessExit
 process.OnUpdateModuleSymbols += OnUpdateModuleSymbols
 process.OnBreakpoint += OnBreakpoint
-process.Continue(False)
 
-evt.WaitOne()
+from System.Threading import WaitHandle 
+handles = Array.CreateInstance(WaitHandle, 2)
+handles[0] = terminate_event
+handles[1] = break_event
+
+while True:
+  process.Continue(False)
+
+  i = WaitHandle.WaitAny(handles)
+  if i == 0:
+    break
+  else:
+    raise "break loop not implemented"
+    
