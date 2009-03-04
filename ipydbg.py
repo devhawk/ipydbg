@@ -3,16 +3,17 @@ clr.AddReference('CorDebug')
 
 import sys
 
-from System import Array
+from System import Array, Console, ConsoleKey
 from System.IO import Path
 from System.Reflection import Assembly
-from System.Threading import AutoResetEvent
+from System.Threading import WaitHandle, AutoResetEvent
 from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
 
 from Microsoft.Samples.Debugging.CorDebug import CorDebugger
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
 
+#use the current executing version of IPY to launch the debug process
 ipy = Assembly.GetEntryAssembly().Location
 py_file = sys.argv[1]
 cmd_line = "\"%s\" -D \"%s\"" % (ipy, py_file)
@@ -112,8 +113,29 @@ def OnUpdateModuleSymbols(s,e):
 def OnBreakpoint(s,e):
   print "OnBreakpoint", get_location(
     symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)
+  e.Continue = False
   break_event.Set()
-  
+
+def input():
+  while True:
+    Console.Write("» ")
+    k = Console.ReadKey()
+    
+    if k.Key == ConsoleKey.Spacebar:
+      Console.WriteLine("\nContinuing")
+      return False
+    if k.Key == ConsoleKey.Q:
+      Console.WriteLine("\nQuitting")
+      process.Terminate(255)
+      return True
+    else:
+      Console.WriteLine()
+      
+      
+    
+    
+    
+
 debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
 process = debugger.CreateProcess(ipy, cmd_line)
 
@@ -122,7 +144,6 @@ process.OnProcessExit += OnProcessExit
 process.OnUpdateModuleSymbols += OnUpdateModuleSymbols
 process.OnBreakpoint += OnBreakpoint
 
-from System.Threading import WaitHandle 
 handles = Array.CreateInstance(WaitHandle, 2)
 handles[0] = terminate_event
 handles[1] = break_event
@@ -133,6 +154,7 @@ while True:
   i = WaitHandle.WaitAny(handles)
   if i == 0:
     break
-  else:
-    raise "break loop not implemented"
-    
+
+  if input():
+    break
+  
