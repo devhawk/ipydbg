@@ -49,6 +49,9 @@ def get_sequence_points(method):
 
 def get_location(frame):
   offset, mapping_result = frame.GetIP()
+  if frame.Function.Module not in symbol_readers:
+    return "Location (offset %d)" % (offset)
+    
   reader = symbol_readers[frame.Function.Module]
   method = reader.GetMethod(SymbolToken(frame.Function.Token))
   
@@ -128,15 +131,19 @@ def input():
     k = Console.ReadKey()
     
     if k.Key == ConsoleKey.Spacebar:
-      Console.WriteLine("\nContinuing")
+      print "\nContinuing"
       return
     elif k.Key == ConsoleKey.Q:
-      Console.WriteLine("\nQuitting")
+      print "\nQuitting"
       process.Stop(0)
       process.Terminate(255)
       return
+    elif k.Key == ConsoleKey.T:
+      print "\nStack Trace"
+      for f in active_thread.ActiveChain.Frames:
+        print "\t", get_location(f)
     else:
-      Console.WriteLine("\n Please enter a valid command")
+      print "\n Please enter a valid command"
 
 debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
 process = debugger.CreateProcess(ipy, cmd_line)
