@@ -47,11 +47,9 @@ def get_sequence_points(method):
   for i in range(method.SequencePointCount):
     yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], spStartCol[i], spEndLines[i], spEndCol[i])
 
-def get_location(reader, thread):
-  frame = thread.ActiveFrame
-  function = frame.Function
-  
+def get_location(frame):
   offset, mapping_result = frame.GetIP()
+  reader = symbol_readers[frame.Function.Module]
   method = reader.GetMethod(SymbolToken(frame.Function.Token))
   
   real_sp = None
@@ -111,15 +109,11 @@ def OnUpdateModuleSymbols(s,e):
       initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
 
 def OnBreakpoint(s,e):
-  print "OnBreakpoint", get_location(
-    symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)
-  
+  print "OnBreakpoint", get_location(e.Thread.ActiveFrame)
   do_break_event(e)
 
 def OnStepComplete(s,e):
-  print "OnStepComplete", e.StepReason, get_location(
-      symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)
-      
+  print "OnStepComplete", e.StepReason, get_location(e.Thread.ActiveFrame)
   do_break_event(e)
   
 def do_break_event(e):
