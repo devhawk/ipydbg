@@ -36,16 +36,18 @@ class sequence_point(object):
     
 def get_sequence_points(method):
   spOffsets    = Array.CreateInstance(int, method.SequencePointCount)
-  spDocs       = Array.CreateInstance(ISymbolDocument, method.SequencePointCount)
+  spDocs = Array.CreateInstance(ISymbolDocument, method.SequencePointCount)
   spStartLines = Array.CreateInstance(int, method.SequencePointCount)
   spEndLines   = Array.CreateInstance(int, method.SequencePointCount)
   spStartCol   = Array.CreateInstance(int, method.SequencePointCount)
   spEndCol     = Array.CreateInstance(int, method.SequencePointCount)
   
-  method.GetSequencePoints(spOffsets, spDocs, spStartLines, spStartCol, spEndLines, spEndCol)
+  method.GetSequencePoints(spOffsets, spDocs, spStartLines, spStartCol, 
+                           spEndLines, spEndCol)
 
   for i in range(method.SequencePointCount):
-    yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], spStartCol[i], spEndLines[i], spEndCol[i])
+    yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], 
+                         spStartCol[i], spEndLines[i], spEndCol[i])
 
 def get_location(frame):
   offset, mapping_result = frame.GetIP()
