@@ -138,6 +138,17 @@ def do_break_event(e):
   e.Continue = False
   break_event.Set()
   
+def get_dynamic_frames(chain):
+  for f in chain.Frames:
+    metadata_import = CorMetadataImport(f.Function.Module)
+    method_info = metadata_import.GetMethodInfo(f.FunctionToken)
+    typename = method_info.DeclaringType.Name
+    if typename.startswith("Microsoft.Scripting.") \
+      or typename.startswith("IronPython.") \
+      or typename == "PythonConsoleHost":
+        continue
+    yield f
+    
 def input():
   while True:
     Console.Write("» ")
@@ -153,7 +164,7 @@ def input():
       return
     elif k.Key == ConsoleKey.T:
       print "\nStack Trace"
-      for f in active_thread.ActiveChain.Frames:
+      for f in get_dynamic_frames(active_thread.ActiveChain):
         offset, sp = get_location(f)
         metadata_import = CorMetadataImport(f.Function.Module)
         method_info = metadata_import.GetMethodInfo(f.FunctionToken)
