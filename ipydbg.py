@@ -10,6 +10,7 @@ from System.Threading import WaitHandle, AutoResetEvent
 from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
 
 from Microsoft.Samples.Debugging.CorDebug import CorDebugger
+from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
 
@@ -34,6 +35,9 @@ class sequence_point(object):
     self.end_line = end_line
     self.end_col = end_col
     
+  def __str__(self):
+    return "%s:%d (offset: %d)" % (Path.GetFileName(self.doc.URL), self.start_line, self.offset)
+    
 def get_sequence_points(method):
   spOffsets    = Array.CreateInstance(int, method.SequencePointCount)
   spDocs = Array.CreateInstance(ISymbolDocument, method.SequencePointCount)
@@ -52,7 +56,7 @@ def get_sequence_points(method):
 def get_location(frame):
   offset, mapping_result = frame.GetIP()
   if frame.Function.Module not in symbol_readers:
-    return "Location (offset %d)" % (offset)
+    return offset, None
     
   reader = symbol_readers[frame.Function.Module]
   method = reader.GetMethod(SymbolToken(frame.Function.Token))
@@ -65,11 +69,10 @@ def get_location(frame):
       real_sp = sp
       
   if real_sp == None:
-    return "Location (offset %d)" % (offset)
+    return offset, None
   
-  return "Location %s:%d (offset %d)" % (
-    Path.GetFileName(real_sp.doc.URL), real_sp.start_line, offset)
-
+  return offset, real_sp
+  
 def create_breakpoint(doc, line, module, reader):
   line = doc.FindClosestLine(line)
   method = reader.GetMethodFromDocumentPosition(doc, line, 0)
@@ -114,11 +117,19 @@ def OnUpdateModuleSymbols(s,e):
       initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
 
 def OnBreakpoint(s,e):
-  print "OnBreakpoint", get_location(e.Thread.ActiveFrame)
+  func = e.Thread.ActiveFrame.Function
+  metadata_import = CorMetadataImport(func.Module)
+  method_info = metadata_import.GetMethodInfo(func.Token)
+  
+
+  
+  offset, sp = get_location(e.Thread.ActiveFrame)
+  print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
   do_break_event(e)
 
 def OnStepComplete(s,e):
-  print "OnStepComplete", e.StepReason, get_location(e.Thread.ActiveFrame)
+  offset, sp = get_location(e.Thread.ActiveFrame)
+  print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
   do_break_event(e)
   
 def do_break_event(e):
@@ -143,9 +154,14 @@ def input():
     elif k.Key == ConsoleKey.T:
       print "\nStack Trace"
       for f in active_thread.ActiveChain.Frames:
-        print "\t", get_location(f)
+        offset, sp = get_location(f)
+        metadata_import = CorMetadataImport(f.Function.Module)
+        method_info = metadata_import.GetMethodInfo(f.FunctionToken)
+        print "  ", \
+          "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name), \
+          sp if sp != None else "(offset %d)" % offset
     else:
-      print "\n Please enter a valid command"
+      print "\nPlease enter a valid command"
 
 debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
 process = debugger.CreateProcess(ipy, cmd_line)
