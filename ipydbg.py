@@ -9,7 +9,7 @@ from System.Reflection import Assembly
 from System.Threading import WaitHandle, AutoResetEvent
 from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
 
-from Microsoft.Samples.Debugging.CorDebug import CorDebugger
+from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType
 from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
@@ -55,6 +55,9 @@ def get_sequence_points(method):
 
 def get_location(frame):
   offset, mapping_result = frame.GetIP()
+  
+  if frame.FrameType != CorFrameType.ILFrame:
+    return offset, None
   if frame.Function.Module not in symbol_readers:
     return offset, None
     
@@ -120,9 +123,7 @@ def OnBreakpoint(s,e):
   func = e.Thread.ActiveFrame.Function
   metadata_import = CorMetadataImport(func.Module)
   method_info = metadata_import.GetMethodInfo(func.Token)
-  
 
-  
   offset, sp = get_location(e.Thread.ActiveFrame)
   print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
   do_break_event(e)
@@ -140,6 +141,8 @@ def do_break_event(e):
   
 def get_dynamic_frames(chain):
   for f in chain.Frames:
+    if f.FrameType != CorFrameType.ILFrame:
+      continue
     metadata_import = CorMetadataImport(f.Function.Module)
     method_info = metadata_import.GetMethodInfo(f.FunctionToken)
     typename = method_info.DeclaringType.Name
