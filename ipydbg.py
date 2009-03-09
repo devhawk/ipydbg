@@ -139,12 +139,17 @@ def do_break_event(e):
   e.Continue = False
   break_event.Set()
   
+def get_method_info_for_frame(frame)
+    if frame.FrameType != CorFrameType.ILFrame:
+      return None
+    metadata_import = CorMetadataImport(frame.Function.Module)
+    return metadata_import.GetMethodInfo(frame.FunctionToken)
+    
 def get_dynamic_frames(chain):
   for f in chain.Frames:
-    if f.FrameType != CorFrameType.ILFrame:
+    method_info = get_method_info_for_frame(f)
+    if method_info == None:
       continue
-    metadata_import = CorMetadataImport(f.Function.Module)
-    method_info = metadata_import.GetMethodInfo(f.FunctionToken)
     typename = method_info.DeclaringType.Name
     if typename.startswith("Microsoft.Scripting.") \
       or typename.startswith("IronPython.") \
@@ -169,8 +174,7 @@ def input():
       print "\nStack Trace"
       for f in get_dynamic_frames(active_thread.ActiveChain):
         offset, sp = get_location(f)
-        metadata_import = CorMetadataImport(f.Function.Module)
-        method_info = metadata_import.GetMethodInfo(f.FunctionToken)
+        method_info = get_method_info_for_frame(f)
         print "  ", \
           "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name), \
           sp if sp != None else "(offset %d)" % offset
