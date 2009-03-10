@@ -3,7 +3,7 @@ clr.AddReference('CorDebug')
 
 import sys
 
-from System import Array, Console, ConsoleKey
+from System import Array, Console, ConsoleKey, ConsoleModifiers 
 from System.IO import Path
 from System.Reflection import Assembly
 from System.Threading import WaitHandle, AutoResetEvent
@@ -172,7 +172,10 @@ def input():
       return
     elif k.Key == ConsoleKey.T:
       print "\nStack Trace"
-      for f in get_dynamic_frames(active_thread.ActiveChain):
+      get_frames = get_dynamic_frames(active_thread.ActiveChain) \
+                     if not (k.Modifiers and ConsoleModifiers.Alt) \
+                     else active_thread.ActiveChain.Frames
+      for f in get_frames:
         offset, sp = get_location(f)
         method_info = get_method_info_for_frame(f)
         print "  ", \
