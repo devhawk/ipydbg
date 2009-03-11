@@ -39,17 +39,18 @@ class sequence_point(object):
     return "%s:%d (offset: %d)" % (Path.GetFileName(self.doc.URL), self.start_line, self.offset)
     
 def get_sequence_points(method):
-  spOffsets    = Array.CreateInstance(int, method.SequencePointCount)
-  spDocs = Array.CreateInstance(ISymbolDocument, method.SequencePointCount)
-  spStartLines = Array.CreateInstance(int, method.SequencePointCount)
-  spEndLines   = Array.CreateInstance(int, method.SequencePointCount)
-  spStartCol   = Array.CreateInstance(int, method.SequencePointCount)
-  spEndCol     = Array.CreateInstance(int, method.SequencePointCount)
+  sp_count = method.SequencePointCount
+  spOffsets    = Array.CreateInstance(int, sp_count)
+  spDocs = Array.CreateInstance(ISymbolDocument, sp_count)
+  spStartLines = Array.CreateInstance(int, sp_count)
+  spEndLines   = Array.CreateInstance(int, sp_count)
+  spStartCol   = Array.CreateInstance(int, sp_count)
+  spEndCol     = Array.CreateInstance(int, sp_count)
   
   method.GetSequencePoints(spOffsets, spDocs, spStartLines, spStartCol, 
                            spEndLines, spEndCol)
 
-  for i in range(method.SequencePointCount):
+  for i in range(sp_count):
     yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], 
                          spStartCol[i], spEndLines[i], spEndCol[i])
 
@@ -206,4 +207,3 @@ while True:
 
   input()
   
-
