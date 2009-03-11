@@ -14,17 +14,8 @@ from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
 
-#use the current executing version of IPY to launch the debug process
-ipy = Assembly.GetEntryAssembly().Location
-py_file = sys.argv[1]
-cmd_line = "\"%s\" -D \"%s\"" % (ipy, py_file)
 
-terminate_event = AutoResetEvent(False)
-break_event = AutoResetEvent(False)
 
-sym_binder = SymbolBinder()
-initial_breakpoint = None
-symbol_readers = dict()
 
 class sequence_point(object):
   def __init__(self, offset, doc, start_line, start_col, end_line, end_col):
@@ -54,28 +45,6 @@ def get_sequence_points(method):
     yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], 
                          spStartCol[i], spEndLines[i], spEndCol[i])
 
-def get_location(frame):
-  offset, mapping_result = frame.GetIP()
-  
-  if frame.FrameType != CorFrameType.ILFrame:
-    return offset, None
-  if frame.Function.Module not in symbol_readers:
-    return offset, None
-    
-  reader = symbol_readers[frame.Function.Module]
-  method = reader.GetMethod(SymbolToken(frame.Function.Token))
-  
-  real_sp = None
-  for sp in get_sequence_points(method):
-    if sp.offset > offset: 
-      break
-    if sp.start_line != 0xfeefee: 
-      real_sp = sp
-      
-  if real_sp == None:
-    return offset, None
-  
-  return offset, real_sp
   
 def create_breakpoint(doc, line, module, reader):
   line = doc.FindClosestLine(line)
@@ -92,54 +61,6 @@ def create_breakpoint(doc, line, module, reader):
   bp.Activate(True)
   return bp
 
-def OnCreateAppDomain(s,e):
-  print "OnCreateAppDomain", e.AppDomain.Name
-  e.AppDomain.Attach()
-  
-def OnProcessExit(s,e):
-  print "OnProcessExit"
-  terminate_event.Set()
-
-def OnUpdateModuleSymbols(s,e):
-  print "OnUpdateModuleSymbols"
-  
-  metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()
-  reader = sym_binder.GetReaderFromStream(metadata_import, e.Stream)
- 
-  global symbol_readers
-  symbol_readers[e.Module] = reader
-  
-  global initial_breakpoint
-  if initial_breakpoint != None:
-    return
-    
-  full_path = Path.GetFullPath(py_file)
-  for doc in reader.GetDocuments():
-    if str.IsNullOrEmpty(doc.URL):
-      continue
-    if str.Compare(full_path, Path.GetFullPath(doc.URL), True) == 0:
-      initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
-
-def OnBreakpoint(s,e):
-  func = e.Thread.ActiveFrame.Function
-  metadata_import = CorMetadataImport(func.Module)
-  method_info = metadata_import.GetMethodInfo(func.Token)
-
-  offset, sp = get_location(e.Thread.ActiveFrame)
-  print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
-  do_break_event(e)
-
-def OnStepComplete(s,e):
-  offset, sp = get_location(e.Thread.ActiveFrame)
-  print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
-  do_break_event(e)
-  
-def do_break_event(e):
-  global active_thread
-  active_thread = e.Thread
-  e.Continue = False
-  break_event.Set()
-  
 def get_method_info_for_frame(frame):
     if frame.FrameType != CorFrameType.ILFrame:
       return None
@@ -158,52 +79,138 @@ def get_dynamic_frames(chain):
         continue
     yield f
     
-def input():
-  while True:
-    Console.Write("» ")
-    k = Console.ReadKey()
-    
-    if k.Key == ConsoleKey.Spacebar:
-      print "\nContinuing"
-      return
-    elif k.Key == ConsoleKey.Q:
-      print "\nQuitting"
-      process.Stop(0)
-      process.Terminate(255)
-      return
-    elif k.Key == ConsoleKey.T:
-      print "\nStack Trace"
-      get_frames = get_dynamic_frames(active_thread.ActiveChain) \
-                     if not (k.Modifiers and ConsoleModifiers.Alt) \
-                     else active_thread.ActiveChain.Frames
-      for f in get_frames:
-        offset, sp = get_location(f)
-        method_info = get_method_info_for_frame(f)
-        print "  ", \
-          "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name), \
-          sp if sp != None else "(offset %d)" % offset
-    else:
-      print "\nPlease enter a valid command"
-
-debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
-process = debugger.CreateProcess(ipy, cmd_line)
-
-process.OnCreateAppDomain += OnCreateAppDomain
-process.OnProcessExit += OnProcessExit
-process.OnUpdateModuleSymbols += OnUpdateModuleSymbols
-process.OnBreakpoint += OnBreakpoint
-process.OnStepComplete += OnStepComplete
-
-handles = Array.CreateInstance(WaitHandle, 2)
-handles[0] = terminate_event
-handles[1] = break_event
-
-while True:
-  process.Continue(False)
-
-  i = WaitHandle.WaitAny(handles)
-  if i == 0:
-    break
-
-  input()
   
+class IPyDebugProcess(object):
+    def __init__(self, debugger=None):
+        self.debugger = debugger if debugger != None \
+            else CorDebugger(CorDebugger.GetDefaultDebuggerVersion())
+            
+    def run(self, py_file):
+        self.py_file = py_file
+        #use the current executing version of IPY to launch the debug process
+        ipy = Assembly.GetEntryAssembly().Location
+        cmd_line = "\"%s\" -D \"%s\"" % (ipy, py_file)
+        self.process = self.debugger.CreateProcess(ipy, cmd_line)
+        
+        self.process.OnCreateAppDomain += self.OnCreateAppDomain
+        self.process.OnProcessExit += self.OnProcessExit
+        self.process.OnUpdateModuleSymbols += self.OnUpdateModuleSymbols
+        self.process.OnBreakpoint += self.OnBreakpoint
+        self.process.OnStepComplete += self.OnStepComplete
+        
+        self.terminate_event = AutoResetEvent(False)
+        self.break_event = AutoResetEvent(False)
+
+        self.sym_binder = SymbolBinder()
+        self.initial_breakpoint = None
+        self.symbol_readers = dict()
+
+        handles = Array.CreateInstance(WaitHandle, 2)
+        handles[0] = self.terminate_event
+        handles[1] = self.break_event
+
+        while True:
+            self.process.Continue(False)
+            i = WaitHandle.WaitAny(handles)
+            if i == 0:
+                break
+            self._input()
+        
+    def _input(self):
+        while True:
+            Console.Write("» ")
+            k = Console.ReadKey()
+
+            if k.Key == ConsoleKey.Spacebar:
+                print "\nContinuing"
+                return
+            elif k.Key == ConsoleKey.Q:
+                print "\nQuitting"
+                self.process.Stop(0)
+                self.process.Terminate(255)
+                return
+            elif k.Key == ConsoleKey.T:
+                print "\nStack Trace"
+                get_frames = get_dynamic_frames(self.active_thread.ActiveChain) \
+                    if (k.Modifiers & ConsoleModifiers.Alt) != ConsoleModifiers.Alt \
+                    else self.active_thread.ActiveChain.Frames
+                for f in get_frames:
+                    offset, sp = self._get_location(f)
+                    method_info = get_method_info_for_frame(f)
+                    print "  ", \
+                        "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name), \
+                        sp if sp != None else "(offset %d)" % offset
+            else:
+                print "\nPlease enter a valid command"
+        
+    def OnCreateAppDomain(self, sender,e):
+        print "OnCreateAppDomain", e.AppDomain.Name
+        e.AppDomain.Attach()
+  
+    def OnProcessExit(self, sender,e):
+        print "OnProcessExit"
+        self.terminate_event.Set()
+
+    def OnUpdateModuleSymbols(self, sender,e):
+        print "OnUpdateModuleSymbols"
+
+        metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()
+        reader = self.sym_binder.GetReaderFromStream(metadata_import, e.Stream)
+
+        self.symbol_readers[e.Module] = reader
+        if self.initial_breakpoint != None:
+            return
+
+        full_path = Path.GetFullPath(self.py_file)
+        for doc in reader.GetDocuments():
+            if str.IsNullOrEmpty(doc.URL):
+                continue
+            if str.Compare(full_path, Path.GetFullPath(doc.URL), True) == 0:
+                self.initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
+
+    def OnBreakpoint(self, sender,e):
+        func = e.Thread.ActiveFrame.Function
+        metadata_import = CorMetadataImport(func.Module)
+        method_info = metadata_import.GetMethodInfo(func.Token)
+
+        offset, sp = self._get_location(e.Thread.ActiveFrame)
+        print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
+        self._do_break_event(e)
+
+    def OnStepComplete(self, sender,e):
+        offset, sp = self._get_location(e.Thread.ActiveFrame)
+        print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
+        self._do_break_event(e)
+  
+    def _do_break_event(self, e):
+        self.active_thread = e.Thread
+        e.Continue = False
+        self.break_event.Set()
+        
+    def _get_location(self, frame):
+        offset, mapping_result = frame.GetIP()
+  
+        if frame.FrameType != CorFrameType.ILFrame:
+            return offset, None
+        if frame.Function.Module not in self.symbol_readers:
+            return offset, None
+    
+        reader = self.symbol_readers[frame.Function.Module]
+        method = reader.GetMethod(SymbolToken(frame.Function.Token))
+  
+        real_sp = None
+        for sp in get_sequence_points(method):
+            if sp.offset > offset: 
+                break
+            if sp.start_line != 0xfeefee: 
+                real_sp = sp
+      
+        if real_sp == None:
+            return offset, None
+  
+        return offset, real_sp
+
+        
+
+p = IPyDebugProcess()
+p.run(sys.argv[1])
