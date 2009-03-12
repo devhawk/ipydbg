@@ -7,6 +7,7 @@ from System import Array, Console, ConsoleKey, ConsoleModifiers
 from System.IO import Path
 from System.Reflection import Assembly
 from System.Threading import WaitHandle, AutoResetEvent
+from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
 
 from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType
@@ -216,18 +217,16 @@ class IPyDebugProcess(object):
   
         return offset, real_sp
 
-if __name__ == "__main__":        
-
-    def run(py_file):
+def run_debugger(py_file):
+    if Thread.CurrentThread.GetApartmentState() == ApartmentState.STA:
+        t = Thread(ParameterizedThreadStart(run_debugger))
+        t.SetApartmentState(ApartmentState.MTA)
+        t.Start(py_file)
+        t.Join()   
+    else:
         p = IPyDebugProcess()
         p.run(py_file)
-    
-    from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 
-    if Thread.CurrentThread.GetApartmentState() == ApartmentState.MTA:
-        run(sys.argv[1])        
-    else:
-        t = Thread(ParameterizedThreadStart(run))
-        t.SetApartmentState(ApartmentState.MTA)
-        t.Start(sys.argv[1])
-        t.Join()   
+if __name__ == "__main__":        
+
+    run_debugger(sys.argv[1])        
