@@ -14,8 +14,8 @@ from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
 
-
-
+#--------------------------------------------
+# sequence point functions
 
 class sequence_point(object):
   def __init__(self, offset, doc, start_line, start_col, end_line, end_col):
@@ -46,6 +46,9 @@ def get_sequence_points(method):
                          spStartCol[i], spEndLines[i], spEndCol[i])
 
   
+#--------------------------------------------
+# breakpoint funcitons
+
 def create_breakpoint(doc, line, module, reader):
   line = doc.FindClosestLine(line)
   method = reader.GetMethodFromDocumentPosition(doc, line, 0)
@@ -60,6 +63,9 @@ def create_breakpoint(doc, line, module, reader):
   bp = function.CreateBreakpoint()
   bp.Activate(True)
   return bp
+
+#--------------------------------------------
+# frame functions
 
 def get_method_info_for_frame(frame):
     if frame.FrameType != CorFrameType.ILFrame:
@@ -210,7 +216,18 @@ class IPyDebugProcess(object):
   
         return offset, real_sp
 
-        
+if __name__ == "__main__":        
 
-p = IPyDebugProcess()
-p.run(sys.argv[1])
+    def run(py_file):
+        p = IPyDebugProcess()
+        p.run(py_file)
+    
+    from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
+
+    if Thread.CurrentThread.GetApartmentState() == ApartmentState.MTA:
+        run(sys.argv[1])        
+    else:
+        t = Thread(ParameterizedThreadStart(run))
+        t.SetApartmentState(ApartmentState.MTA)
+        t.Start(sys.argv[1])
+        t.Join()   
