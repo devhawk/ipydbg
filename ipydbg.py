@@ -98,7 +98,6 @@ def create_stepper(thread):
   
 from System import UInt32
 def create_step_range(start, end):
-  print "Create Step Range", start, end
   range = Array.CreateInstance(COR_DEBUG_STEP_RANGE, 1)
   range[0] = COR_DEBUG_STEP_RANGE(startOffset = UInt32(start), endOffset = UInt32(end))
   return range
