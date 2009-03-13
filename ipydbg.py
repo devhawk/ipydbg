@@ -99,16 +99,19 @@ def create_stepper(thread):
 from System import UInt32
 def create_step_range(start, end):
   range = Array.CreateInstance(COR_DEBUG_STEP_RANGE, 1)
-  range[0] = COR_DEBUG_STEP_RANGE(startOffset = UInt32(start), endOffset = UInt32(end))
+  range[0] = COR_DEBUG_STEP_RANGE( 
+                startOffset = UInt32(start), 
+                endOffset = UInt32(end))
   return range
   
 def get_step_ranges(thread, reader):
-    offset, mapResult = thread.ActiveFrame.GetIP()
-    method = reader.GetMethod(SymbolToken(thread.ActiveFrame.FunctionToken))
+    frame = thread.ActiveFrame
+    offset, mapResult = frame.GetIP()
+    method = reader.GetMethod(SymbolToken(frame.FunctionToken))
     for sp in get_sequence_points(method):
         if sp.offset > offset:
             return create_step_range(offset, sp.offset)
-    return create_step_range(offset, thread.ActiveFrame.Function.ILCode.Size)
+    return create_step_range(offset, frame.Function.ILCode.Size)
           
 #--------------------------------------------
 # main IPyDebugProcess class
@@ -151,7 +154,7 @@ class IPyDebugProcess(object):
         
     def _input(self):
         while True:
-            Console.Write("» ")
+            print "» ",
             k = Console.ReadKey()
 
             if k.Key == ConsoleKey.Spacebar:
@@ -170,9 +173,10 @@ class IPyDebugProcess(object):
                 for f in get_frames:
                     offset, sp = self._get_location(f)
                     method_info = get_method_info_for_frame(f)
-                    print "  ", \
-                        "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name), \
-                        sp if sp != None else "(offset %d)" % offset
+                    print "  ",
+                    if method_info != None:
+                      print "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name),
+                    print sp if sp != None else "(offset %d)" % offset
             elif k.Key == ConsoleKey.S:
                 print "\nStepping"
                 self._do_step(False)
@@ -279,3 +283,5 @@ def run_debugger(py_file):
 if __name__ == "__main__":        
 
     run_debugger(sys.argv[1])        
+
+
