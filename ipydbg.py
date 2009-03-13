@@ -11,6 +11,7 @@ from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
 
 from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType
+from Microsoft.Samples.Debugging.CorDebug.NativeApi import CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE
 from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
@@ -87,6 +88,31 @@ def get_dynamic_frames(chain):
         continue
     yield f
     
+#--------------------------------------------
+# stepper functions
+
+def create_stepper(thread):
+  stepper = thread.ActiveFrame.CreateStepper()
+  stepper.SetUnmappedStopMask(CorDebugUnmappedStop.STOP_NONE)
+  return stepper
+  
+from System import UInt32
+def create_step_range(start, end):
+  print "Create Step Range", start, end
+  range = Array.CreateInstance(COR_DEBUG_STEP_RANGE, 1)
+  range[0] = COR_DEBUG_STEP_RANGE(startOffset = UInt32(start), endOffset = UInt32(end))
+  return range
+  
+def get_step_ranges(thread, reader):
+    offset, mapResult = thread.ActiveFrame.GetIP()
+    method = reader.GetMethod(SymbolToken(thread.ActiveFrame.FunctionToken))
+    for sp in get_sequence_points(method):
+        if sp.offset > offset:
+            return create_step_range(offset, sp.offset)
+    return create_step_range(offset, thread.ActiveFrame.Function.ILCode.Size)
+          
+#--------------------------------------------
+# main IPyDebugProcess class
   
 class IPyDebugProcess(object):
     def __init__(self, debugger=None):
@@ -148,6 +174,19 @@ class IPyDebugProcess(object):
                     print "  ", \
                         "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name), \
                         sp if sp != None else "(offset %d)" % offset
+            elif k.Key == ConsoleKey.S:
+                print "\nStepping"
+                self._do_step(False)
+                return
+            elif k.Key == ConsoleKey.I:
+                print "\nStepping In"
+                self._do_step(True)
+                return                
+            elif k.Key == ConsoleKey.O:
+                print "\nStepping Out"
+                stepper = create_stepper(self.active_thread)
+                stepper.StepOut()
+                return
             else:
                 print "\nPlease enter a valid command"
         
@@ -204,7 +243,7 @@ class IPyDebugProcess(object):
             return offset, None
     
         reader = self.symbol_readers[frame.Function.Module]
-        method = reader.GetMethod(SymbolToken(frame.Function.Token))
+        method = reader.GetMethod(SymbolToken(frame.FunctionToken))
   
         real_sp = None
         for sp in get_sequence_points(method):
@@ -216,6 +255,17 @@ class IPyDebugProcess(object):
             return offset, None
   
         return offset, real_sp
+        
+    def _do_step(self, step_in):
+        stepper = create_stepper(self.active_thread)
+        module = self.active_thread.ActiveFrame.Function.Module
+        if module not in self.symbol_readers:
+            stepper.Step(step_in)
+        else:
+          range = get_step_ranges(self.active_thread, self.symbol_readers[module])
+          stepper.StepRange(step_in, range)
+
+      
 
 def run_debugger(py_file):
     if Thread.CurrentThread.GetApartmentState() == ApartmentState.STA:
