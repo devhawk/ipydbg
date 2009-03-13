@@ -43,8 +43,9 @@ def get_sequence_points(method):
                            spEndLines, spEndCol)
 
   for i in range(sp_count):
-    yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], 
-                         spStartCol[i], spEndLines[i], spEndCol[i])
+    if spStartLines[i] != 0xfeefee:
+      yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], 
+                           spStartCol[i], spEndLines[i], spEndCol[i])
 
   
 #--------------------------------------------
@@ -209,8 +210,7 @@ class IPyDebugProcess(object):
         for sp in get_sequence_points(method):
             if sp.offset > offset: 
                 break
-            if sp.start_line != 0xfeefee: 
-                real_sp = sp
+            real_sp = sp
       
         if real_sp == None:
             return offset, None
