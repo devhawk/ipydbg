@@ -91,9 +91,10 @@ def get_dynamic_frames(chain):
 #--------------------------------------------
 # stepper functions
 
-def create_stepper(thread):
+def create_stepper(thread, JMC = True):
   stepper = thread.ActiveFrame.CreateStepper()
   stepper.SetUnmappedStopMask(CorDebugUnmappedStop.STOP_NONE)
+  stepper.SetJmcStatus(JMC)
   return stepper
   
 from System import UInt32
@@ -112,7 +113,14 @@ def get_step_ranges(thread, reader):
         if sp.offset > offset:
             return create_step_range(offset, sp.offset)
     return create_step_range(offset, frame.Function.ILCode.Size)
-          
+  
+infrastructure_methods =  ['TryGetExtraValue', 
+    'TrySetExtraValue', 
+    '.cctor', 
+    '.ctor', 
+    'CustomSymbolDictionary.GetExtraKeys', 
+    'IModuleDictionaryInitialization.InitializeModuleDictionary']
+                  
 #--------------------------------------------
 # main IPyDebugProcess class
   
@@ -133,6 +141,7 @@ class IPyDebugProcess(object):
         self.process.OnUpdateModuleSymbols += self.OnUpdateModuleSymbols
         self.process.OnBreakpoint += self.OnBreakpoint
         self.process.OnStepComplete += self.OnStepComplete
+        self.process.OnClassLoad += self.OnClassLoad
         
         self.terminate_event = AutoResetEvent(False)
         self.break_event = AutoResetEvent(False)
@@ -200,6 +209,33 @@ class IPyDebugProcess(object):
     def OnProcessExit(self, sender,e):
         print "OnProcessExit"
         self.terminate_event.Set()
+   
+    def OnClassLoad(self, sender, e):
+        cmi = CorMetadataImport(e.Class.Module)
+        mt = cmi.GetType(e.Class.Token)
+        print "OnClassLoad", mt.Name
+        
+        #python code is always in a dynamic module, 
+        #so non-dynamic modules aren't JMC
+        if not e.Class.Module.IsDynamic:
+          e.Class.JMCStatus = False
+        
+        #python classes in the IronPython.NewTypes only implement python class 
+        #semantics, they have no python code in them so they aren't JMC
+        elif mt.Name.startswith('IronPython.NewTypes'):
+          e.Class.JMCStatus = False
+          
+        #assume that dynamic module classes not in the IronPython.NewTypes 
+        #namespace are python modules, so mark them as JMC and iterate thru
+        #the methods looking for standard infrastructure methods to mark as
+        #JMC disabled
+        else:
+          e.Class.JMCStatus = True
+          
+          for mmi in mt.GetMethods():
+            if mmi.Name in infrastructure_methods:
+              f = e.Class.Module.GetFunctionFromToken(mmi.MetadataToken)
+              f.JMCStatus = False
 
     def OnUpdateModuleSymbols(self, sender,e):
         print "OnUpdateModuleSymbols"
