@@ -50,17 +50,14 @@ namespace Microsoft.Samples.Debugging.CorDebug
             if (r==0 && c==1) // S_OK && we got 1 new element
             {
                 ICorDebugBreakpoint br = a[0];
-                throw new NotImplementedException();
-                /*
-                if(a is ICorDebugFunctionBreakpoint)
+                if (br is ICorDebugFunctionBreakpoint)
                     m_br = new CorFunctionBreakpoint((ICorDebugFunctionBreakpoint)br);
-                else if( a is ICorDebugModuleBreakpoint)
+                else if (br is ICorDebugModuleBreakpoint)
                     m_br = new CorModuleBreakpoint((ICorDebugModuleBreakpoint)br);
-                else if( a is ICorDebugValueBreakpoint)
-                    m_br = new ValueBreakpoint((ICorDebugValueBreakpoint)m_br);
+                else if (br is ICorDebugValueBreakpoint)
+                    m_br = new CorValueBreakpoint((ICorDebugValueBreakpoint)m_br);
                 else
-                    Debug.Assert(false);
-                */
+                    throw new NotSupportedException("unexpected breakpoint type");
             }
             else
                 m_br = null;
