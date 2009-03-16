@@ -155,11 +155,14 @@ class IPyDebugProcess(object):
         handles[1] = self.break_event
 
         while True:
+            if hasattr(self, 'active_thread'): delattr(self, 'active_thread')
+            if hasattr(self, 'active_appdomain'): delattr(self, 'active_appdomain')
             self.process.Continue(False)
             i = WaitHandle.WaitAny(handles)
             if i == 0:
                 break
             self._input()
+            
         
     def _input(self):
         while True:
@@ -269,6 +272,7 @@ class IPyDebugProcess(object):
         self._do_break_event(e)
   
     def _do_break_event(self, e):
+        self.active_appdomain = e.AppDomain
         self.active_thread = e.Thread
         e.Continue = False
         self.break_event.Set()
