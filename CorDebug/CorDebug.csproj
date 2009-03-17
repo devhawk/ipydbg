@@ -84,17 +84,17 @@
     <Compile Include="CorSymbolStore\ISymSearchInfo.cs" />
     <Compile Include="CorSymbolStore\ISymWriter2.cs" />
     <Compile Include="CorSymbolStore\SymAccess.cs" />
-    <Compile Include="CorSymbolStore\symbinder.cs" />
+    <Compile Include="CorSymbolStore\SymBinder.cs" />
     <Compile Include="CorSymbolStore\SymConstant.cs" />
     <Compile Include="CorSymbolStore\SymDocument.cs" />
     <Compile Include="CorSymbolStore\SymDocumentWriter.cs" />
-    <Compile Include="CorSymbolStore\symmethod.cs" />
+    <Compile Include="CorSymbolStore\SymMethod.cs" />
     <Compile Include="CorSymbolStore\SymNamespace.cs" />
     <Compile Include="CorSymbolStore\SymReader.cs" />
     <Compile Include="CorSymbolStore\SymScope.cs" />
     <Compile Include="CorSymbolStore\SymSearchInfo.cs" />
     <Compile Include="CorSymbolStore\SymSearchPolicyAttributes.cs" />
-    <Compile Include="CorSymbolStore\symvariable.cs" />
+    <Compile Include="CorSymbolStore\SymVariable.cs" />
     <Compile Include="CorSymbolStore\SymWriter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -107,6 +107,6 @@
   </Target>
   -->
   <PropertyGroup>
-    <PostBuildEvent>copy $(TargetPath) $(ProjectDir)\..</PostBuildEvent>
+    <PostBuildEvent>copy $(TargetDir)\* $(ProjectDir)\..</PostBuildEvent>
   </PropertyGroup>
 </Project>
