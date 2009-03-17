@@ -364,6 +364,14 @@ namespace Microsoft.Samples.Debugging.CorDebug
                 return CorFrameType.NativeFrame;
             }
         }
+
+        public System.Reflection.MethodInfo GetMethodInfo()
+        {
+            if (this.FrameType != CorFrameType.ILFrame)
+                return null;
+
+            return this.Function.GetMethodInfo();
+        }
         
         [CLSCompliant(false)]
         public CorDebugInternalFrameType InternalFrameType
@@ -1090,6 +1098,12 @@ namespace Microsoft.Samples.Debugging.CorDebug
             }
         }
         internal ICorDebugFunction m_function;
+
+        public System.Reflection.MethodInfo GetMethodInfo()
+        {
+            var mi = new Microsoft.Samples.Debugging.CorMetadata.CorMetadataImport(this.Module);
+            return mi.GetMethodInfo(this.Token);
+        }
     }
 
     public sealed class CorContext : WrapperBase

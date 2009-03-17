@@ -75,6 +75,12 @@ namespace Microsoft.Samples.Debugging.CorDebug
             return pValue==null?null:new CorValue(pValue);
         }
 
+
+        public Type GetTypeInfo()
+        {
+            var mi = new Microsoft.Samples.Debugging.CorMetadata.CorMetadataImport(this.Module);
+            return mi.GetType(this.Token);
+        }
     } /* class Class */
 
 } /* namespace */

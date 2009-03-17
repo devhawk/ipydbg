@@ -70,15 +70,9 @@ def create_breakpoint(doc, line, module, reader):
 #--------------------------------------------
 # frame functions
 
-def get_method_info_for_frame(frame):
-    if frame.FrameType != CorFrameType.ILFrame:
-      return None
-    metadata_import = CorMetadataImport(frame.Function.Module)
-    return metadata_import.GetMethodInfo(frame.FunctionToken)
-    
 def get_dynamic_frames(chain):
   for f in chain.Frames:
-    method_info = get_method_info_for_frame(f)
+    method_info = f.GetMethodInfo()
     if method_info == None:
       continue
     typename = method_info.DeclaringType.Name
@@ -184,7 +178,7 @@ class IPyDebugProcess(object):
                     else self.active_thread.ActiveChain.Frames
                 for f in get_frames:
                     offset, sp = self._get_location(f)
-                    method_info = get_method_info_for_frame(f)
+                    method_info = f.GetMethodInfo()
                     print "  ",
                     if method_info != None:
                       print "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name),
@@ -214,8 +208,7 @@ class IPyDebugProcess(object):
         self.terminate_event.Set()
    
     def OnClassLoad(self, sender, e):
-        cmi = CorMetadataImport(e.Class.Module)
-        mt = cmi.GetType(e.Class.Token)
+        mt = e.Class.GetTypeInfo()
         print "OnClassLoad", mt.Name
         
         #python code is always in a dynamic module, 
@@ -258,10 +251,7 @@ class IPyDebugProcess(object):
                 self.initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
 
     def OnBreakpoint(self, sender,e):
-        func = e.Thread.ActiveFrame.Function
-        metadata_import = CorMetadataImport(func.Module)
-        method_info = metadata_import.GetMethodInfo(func.Token)
-
+        method_info =  e.Thread.ActiveFrame.Function.GetMethodInfo()
         offset, sp = self._get_location(e.Thread.ActiveFrame)
         print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
         self._do_break_event(e)
