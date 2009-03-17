@@ -31,20 +31,20 @@ class sequence_point(object):
   def __str__(self):
     return "%s:%d (offset: %d)" % (Path.GetFileName(self.doc.URL), self.start_line, self.offset)
     
-def get_sequence_points(method):
-  sp_count = method.SequencePointCount
+def get_sequence_points(symmethod, include_hidden_lines = False):
+  sp_count     = symmethod.SequencePointCount
   spOffsets    = Array.CreateInstance(int, sp_count)
-  spDocs = Array.CreateInstance(ISymbolDocument, sp_count)
+  spDocs       = Array.CreateInstance(ISymbolDocument, sp_count)
   spStartLines = Array.CreateInstance(int, sp_count)
   spEndLines   = Array.CreateInstance(int, sp_count)
   spStartCol   = Array.CreateInstance(int, sp_count)
   spEndCol     = Array.CreateInstance(int, sp_count)
   
-  method.GetSequencePoints(spOffsets, spDocs, spStartLines, spStartCol, 
-                           spEndLines, spEndCol)
+  symmethod.GetSequencePoints(spOffsets, spDocs, spStartLines, spStartCol, 
+                              spEndLines, spEndCol)
 
   for i in range(sp_count):
-    if spStartLines[i] != 0xfeefee:
+    if spStartLines[i] != 0xfeefee or include_hidden_lines:
       yield sequence_point(spOffsets[i], spDocs[i], spStartLines[i], 
                            spStartCol[i], spEndLines[i], spEndCol[i])
 
