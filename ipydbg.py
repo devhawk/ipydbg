@@ -174,11 +174,24 @@ class IPyDebugProcess(object):
             if i == 0:
                 break
             self._input()
-            
+    
+    def _print_source_line(self, sp, lines):
+      line = lines[sp.start_line-1]
+      with ConsoleColorMgr(ConsoleColor.Gray):
+        Console.Write("%d: " % sp.start_line)
+        Console.Write(line.Substring(0, sp.start_col-1))
+        with ConsoleColorMgr(ConsoleColor.Yellow):
+          if sp.start_col > len(line):
+            Console.Write(" ^^^")
+          else:
+            Console.Write(line.Substring(sp.start_col-1, sp.end_col - sp.start_col))
+        Console.WriteLine(line.Substring(sp.end_col-1))
+        
+      
     def _input(self):
         offset, sp = self._get_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
-        print "%d:" % sp.start_line, lines[sp.start_line-1]
+        self._print_source_line(sp, lines)
         while True:
             
             print "» ",
