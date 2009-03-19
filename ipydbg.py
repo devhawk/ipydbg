@@ -32,6 +32,9 @@ class ConsoleColorMgr(object):
   def __exit__(self, t, v, tr):
     Console.ForegroundColor = self.temp
 
+CCDarkGray = ConsoleColorMgr(ConsoleColor.DarkGray)
+CCGray = ConsoleColorMgr(ConsoleColor.Gray)
+CCYellow   = ConsoleColorMgr(ConsoleColor.Yellow)
 #--------------------------------------------
 # sequence point functions
 
@@ -177,10 +180,10 @@ class IPyDebugProcess(object):
     
     def _print_source_line(self, sp, lines):
       line = lines[sp.start_line-1]
-      with ConsoleColorMgr(ConsoleColor.Gray):
+      with CCGray:
         Console.Write("%d: " % sp.start_line)
         Console.Write(line.Substring(0, sp.start_col-1))
-        with ConsoleColorMgr(ConsoleColor.Yellow):
+        with CCYellow:
           if sp.start_col > len(line):
             Console.Write(" ^^^")
           else:
@@ -234,18 +237,18 @@ class IPyDebugProcess(object):
                 print "\nPlease enter a valid command"
         
     def OnCreateAppDomain(self, sender,e):
-        with ConsoleColorMgr(ConsoleColor.DarkGray):
+        with CCDarkGray: 
           print "OnCreateAppDomain", e.AppDomain.Name
         e.AppDomain.Attach()
   
     def OnProcessExit(self, sender,e):
-        with ConsoleColorMgr(ConsoleColor.DarkGray):
+        with CCDarkGray:
           print "OnProcessExit"
         self.terminate_event.Set()
    
     def OnClassLoad(self, sender, e):
         mt = e.Class.GetTypeInfo()
-        with ConsoleColorMgr(ConsoleColor.DarkGray):
+        with CCDarkGray:
           print "OnClassLoad", mt.Name
         
         #python code is always in a dynamic module, 
@@ -271,7 +274,7 @@ class IPyDebugProcess(object):
               f.JMCStatus = False
 
     def OnUpdateModuleSymbols(self, sender,e):
-        with ConsoleColorMgr(ConsoleColor.DarkGray):
+        with CCDarkGray:
           print "OnUpdateModuleSymbols"
 
         metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()
@@ -291,13 +294,13 @@ class IPyDebugProcess(object):
     def OnBreakpoint(self, sender,e):
         method_info =  e.Thread.ActiveFrame.Function.GetMethodInfo()
         offset, sp = self._get_location(e.Thread.ActiveFrame)
-        with ConsoleColorMgr(ConsoleColor.DarkGray):
+        with CCDarkGray:
           print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
         self._do_break_event(e)
 
     def OnStepComplete(self, sender,e):
         offset, sp = self._get_location(e.Thread.ActiveFrame)
-        with ConsoleColorMgr(ConsoleColor.DarkGray):
+        with CCDarkGray:
           print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
         if e.StepReason == CorDebugStepReason.STEP_CALL:
           self._do_step(e.Thread, False)
