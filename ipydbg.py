@@ -4,7 +4,7 @@ clr.AddReference('CorDebug')
 import sys
 
 from System import Array, Console, ConsoleKey, ConsoleModifiers 
-from System.IO import Path
+from System.IO import Path, File
 from System.Reflection import Assembly
 from System.Threading import WaitHandle, AutoResetEvent
 from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
@@ -144,6 +144,7 @@ class IPyDebugProcess(object):
         self.sym_binder = SymbolBinder()
         self.initial_breakpoint = None
         self.symbol_readers = dict()
+        self.source_files = dict()
 
         handles = Array.CreateInstance(WaitHandle, 2)
         handles[0] = self.terminate_event
@@ -158,9 +159,12 @@ class IPyDebugProcess(object):
                 break
             self._input()
             
-        
     def _input(self):
+        offset, sp = self._get_location(self.active_thread.ActiveFrame)
+        lines = self._get_file(sp.doc.URL)
+        print "%d:" % sp.start_line, lines[sp.start_line-1]
         while True:
+            
             print "» ",
             k = Console.ReadKey()
 
@@ -271,6 +275,12 @@ class IPyDebugProcess(object):
         e.Continue = False
         self.break_event.Set()
         
+    def _get_file(self,filename):
+        filename = Path.GetFileName(filename)
+        if not filename in self.source_files:
+          self.source_files[filename] = File.ReadAllLines(filename)
+        return self.source_files[filename] 
+    
     def _get_location(self, frame):
         offset, mapping_result = frame.GetIP()
   
