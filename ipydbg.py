@@ -29,7 +29,8 @@ class sequence_point(object):
     self.end_col = end_col
     
   def __str__(self):
-    return "%s:%d (offset: %d)" % (Path.GetFileName(self.doc.URL), self.start_line, self.offset)
+    return "%s %d:%d-%d:%d (offset:%d)" % (Path.GetFileName(self.doc.URL), 
+      self.start_line, self.start_col, self.end_line, self.end_col, self.offset)
     
 def get_sequence_points(symmethod, include_hidden_lines = False):
   sp_count     = symmethod.SequencePointCount
