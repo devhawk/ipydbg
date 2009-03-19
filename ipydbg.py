@@ -11,7 +11,7 @@ from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
 
 from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType
-from Microsoft.Samples.Debugging.CorDebug.NativeApi import CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE
+from Microsoft.Samples.Debugging.CorDebug.NativeApi import CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason
 from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
@@ -186,11 +186,11 @@ class IPyDebugProcess(object):
                     print sp if sp != None else "(offset %d)" % offset
             elif k.Key == ConsoleKey.S:
                 print "\nStepping"
-                self._do_step(False)
+                self._do_step(self.active_thread, False)
                 return
             elif k.Key == ConsoleKey.I:
                 print "\nStepping In"
-                self._do_step(True)
+                self._do_step(self.active_thread, True)
                 return                
             elif k.Key == ConsoleKey.O:
                 print "\nStepping Out"
@@ -260,8 +260,11 @@ class IPyDebugProcess(object):
     def OnStepComplete(self, sender,e):
         offset, sp = self._get_location(e.Thread.ActiveFrame)
         print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
-        self._do_break_event(e)
-  
+        if e.StepReason == CorDebugStepReason.STEP_CALL:
+          self._do_step(e.Thread, False)
+        else:
+          self._do_break_event(e)
+            
     def _do_break_event(self, e):
         self.active_appdomain = e.AppDomain
         self.active_thread = e.Thread
@@ -290,15 +293,14 @@ class IPyDebugProcess(object):
   
         return offset, real_sp
         
-    def _do_step(self, step_in):
-        stepper = create_stepper(self.active_thread)
-        module = self.active_thread.ActiveFrame.Function.Module
+    def _do_step(self, thread, step_in):
+        stepper = create_stepper(thread)
+        module = thread.ActiveFrame.Function.Module
         if module not in self.symbol_readers:
             stepper.Step(step_in)
         else:
-          range = get_step_ranges(self.active_thread, self.symbol_readers[module])
-          stepper.StepRange(step_in, range)
-
+          range = get_step_ranges(thread, self.symbol_readers[module])
+          stepper.StepRange(step_in, range)       
       
 
 def run_debugger(py_file):
