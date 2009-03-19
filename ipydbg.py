@@ -1,9 +1,11 @@
+from __future__ import with_statement
+
 import clr
 clr.AddReference('CorDebug')
 
 import sys
 
-from System import Array, Console, ConsoleKey, ConsoleModifiers 
+from System import Array, Console, ConsoleKey, ConsoleModifiers, ConsoleColor
 from System.IO import Path, File
 from System.Reflection import Assembly
 from System.Threading import WaitHandle, AutoResetEvent
@@ -15,6 +17,20 @@ from Microsoft.Samples.Debugging.CorDebug.NativeApi import CorDebugUnmappedStop,
 from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
+
+#--------------------------------------------
+# helper class to manage console color
+
+class ConsoleColorMgr(object):
+  def __init__(self, color):
+    self.color = color
+
+  def __enter__(self):
+    self.temp = Console.ForegroundColor
+    Console.ForegroundColor = self.color
+    
+  def __exit__(self, t, v, tr):
+    Console.ForegroundColor = self.temp
 
 #--------------------------------------------
 # sequence point functions
@@ -205,16 +221,19 @@ class IPyDebugProcess(object):
                 print "\nPlease enter a valid command"
         
     def OnCreateAppDomain(self, sender,e):
-        print "OnCreateAppDomain", e.AppDomain.Name
+        with ConsoleColorMgr(ConsoleColor.DarkGray):
+          print "OnCreateAppDomain", e.AppDomain.Name
         e.AppDomain.Attach()
   
     def OnProcessExit(self, sender,e):
-        print "OnProcessExit"
+        with ConsoleColorMgr(ConsoleColor.DarkGray):
+          print "OnProcessExit"
         self.terminate_event.Set()
    
     def OnClassLoad(self, sender, e):
         mt = e.Class.GetTypeInfo()
-        print "OnClassLoad", mt.Name
+        with ConsoleColorMgr(ConsoleColor.DarkGray):
+          print "OnClassLoad", mt.Name
         
         #python code is always in a dynamic module, 
         #so non-dynamic modules aren't JMC
@@ -239,7 +258,8 @@ class IPyDebugProcess(object):
               f.JMCStatus = False
 
     def OnUpdateModuleSymbols(self, sender,e):
-        print "OnUpdateModuleSymbols"
+        with ConsoleColorMgr(ConsoleColor.DarkGray):
+          print "OnUpdateModuleSymbols"
 
         metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()
         reader = self.sym_binder.GetReaderFromStream(metadata_import, e.Stream)
@@ -258,12 +278,14 @@ class IPyDebugProcess(object):
     def OnBreakpoint(self, sender,e):
         method_info =  e.Thread.ActiveFrame.Function.GetMethodInfo()
         offset, sp = self._get_location(e.Thread.ActiveFrame)
-        print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
+        with ConsoleColorMgr(ConsoleColor.DarkGray):
+          print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
         self._do_break_event(e)
 
     def OnStepComplete(self, sender,e):
         offset, sp = self._get_location(e.Thread.ActiveFrame)
-        print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
+        with ConsoleColorMgr(ConsoleColor.DarkGray):
+          print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
         if e.StepReason == CorDebugStepReason.STEP_CALL:
           self._do_step(e.Thread, False)
         else:
