@@ -57,9 +57,9 @@ def get_sequence_points(symmethod, include_hidden_lines = False):
 #--------------------------------------------
 # breakpoint funcitons
 
-def create_breakpoint(doc, line, module, reader):
+def create_breakpoint(doc, line, module):
   line = doc.FindClosestLine(line)
-  method = reader.GetMethodFromDocumentPosition(doc, line, 0)
+  method = module.SymbolReader.GetMethodFromDocumentPosition(doc, line, 0)
   function = module.GetFunctionFromToken(method.Token.GetToken())
   
   for sp in get_sequence_points(method):
@@ -147,7 +147,6 @@ class IPyDebugProcess(object):
 
         self.sym_binder = SymbolBinder()
         self.initial_breakpoint = None
-        self.symbol_readers = dict()
         self.source_files = dict()
 
         handles = Array.CreateInstance(WaitHandle, 2)
@@ -204,7 +203,7 @@ class IPyDebugProcess(object):
                     print "  ",
                     if method_info != None:
                       print "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name),
-                    print sp if sp != None else "(offset %d)" % offset
+                    print sp if sp != None else "(offset %d)" % offset, f.FrameType
             elif k.Key == ConsoleKey.S:
                 print "\nStepping"
                 self._do_step(self.active_thread, False)
@@ -260,21 +259,18 @@ class IPyDebugProcess(object):
 
     def OnUpdateModuleSymbols(self, sender,e):
         with CC.DarkGray:
-          print "OnUpdateModuleSymbols"
+          print "OnUpdateModuleSymbols", e.Module.Name
 
-        metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()
-        reader = self.sym_binder.GetReaderFromStream(metadata_import, e.Stream)
-
-        self.symbol_readers[e.Module] = reader
+        e.Module.UpdateSymbolReaderFromStream(e.Stream)
         if self.initial_breakpoint != None:
             return
 
         full_path = Path.GetFullPath(self.py_file)
-        for doc in reader.GetDocuments():
+        for doc in e.Module.SymbolReader.GetDocuments():
             if str.IsNullOrEmpty(doc.URL):
                 continue
             if str.Compare(full_path, Path.GetFullPath(doc.URL), True) == 0:
-                self.initial_breakpoint = create_breakpoint(doc, 1, e.Module, reader)
+                self.initial_breakpoint = create_breakpoint(doc, 1, e.Module)
 
     def OnBreakpoint(self, sender,e):
         method_info =  e.Thread.ActiveFrame.Function.GetMethodInfo()
@@ -309,10 +305,9 @@ class IPyDebugProcess(object):
   
         if frame.FrameType != CorFrameType.ILFrame:
             return offset, None
-        if frame.Function.Module not in self.symbol_readers:
+        reader = frame.Function.Module.SymbolReader
+        if reader == None:  
             return offset, None
-    
-        reader = self.symbol_readers[frame.Function.Module]
         method = reader.GetMethod(SymbolToken(frame.FunctionToken))
   
         real_sp = None
@@ -328,11 +323,11 @@ class IPyDebugProcess(object):
         
     def _do_step(self, thread, step_in):
         stepper = create_stepper(thread)
-        module = thread.ActiveFrame.Function.Module
-        if module not in self.symbol_readers:
+        reader = thread.ActiveFrame.Function.Module.SymbolReader
+        if reader == None:
             stepper.Step(step_in)
         else:
-          range = get_step_ranges(thread, self.symbol_readers[module])
+          range = get_step_ranges(thread, reader)
           stepper.StepRange(step_in, range)       
       
 

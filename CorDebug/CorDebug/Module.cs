@@ -9,6 +9,10 @@ using System.Runtime.InteropServices;
 
 using Microsoft.Samples.Debugging.CorDebug.NativeApi;
 using Microsoft.Samples.Debugging.CorMetadata.NativeApi;
+using Microsoft.Samples.Debugging.CorSymbolStore;
+using System.Diagnostics.SymbolStore;
+using System.Collections.Generic;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace Microsoft.Samples.Debugging.CorDebug
 {
@@ -107,6 +111,38 @@ namespace Microsoft.Samples.Debugging.CorDebug
             m_module = managedModule;
         }
 
+        private static SymbolBinder _symbolBinder = new SymbolBinder();
+
+        public static SymbolBinder SymbolBinder { get { return _symbolBinder; } }
+ 
+        private static Dictionary<CorModule, ISymbolReader> _symbolsMap = new Dictionary<CorModule, ISymbolReader>();
+
+        public ISymbolReader GetReaderFromStream(IStream stream)
+        {
+            var metadata_import = this.GetMetaDataInterface<IMetadataImport>();
+            var binder = new Microsoft.Samples.Debugging.CorSymbolStore.SymbolBinder();
+            return binder.GetReaderFromStream(metadata_import, stream);
+        }
+
+        public void UpdateSymbolReaderFromStream(IStream stream)
+        {
+            SymbolReader = GetReaderFromStream(stream);
+        }
+
+        public ISymbolReader SymbolReader 
+        {
+            get
+            {
+                if (_symbolsMap.ContainsKey(this))
+                    return _symbolsMap[this];
+                else
+                    return null;
+            }
+            set
+            {
+                _symbolsMap[this] = value;
+            }
+        }
 
         /** The process this module is in. */
         public CorProcess Process
