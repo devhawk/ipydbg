@@ -418,18 +418,12 @@ class IPyDebugProcess(object):
               if k.Key == ConsoleKey.L:
                 print "\nList Breakpoints"   
                 for bp in self.active_appdomain.Breakpoints: 
-                  symmethod = bp.Function.GetSymbolMethod()
-                  real_sp = None
-                  for sp in get_sequence_points(symmethod):
-                      if sp.offset > bp.Offset: 
-                          break
-                      real_sp = sp
-                  
-                  print "%s:%d" % (sp.doc.URL, sp.start_line)
+                  sp = get_location(bp.Function, bp.Offset)
+                  print "  %s:%d" % (sp.doc.URL, sp.start_line)
               elif k.Key == ConsoleKey.D:
                 print "\nDelete Breakpoint Not Implemented"           
               elif k.Key == ConsoleKey.A:
-                print "\nAdd Breakpoint"           
+                print "\nAdd Breakpoint Not Implemented"           
               elif k.Key == ConsoleKey.Q:
                   print "\nExiting BP Management"           
                   break
