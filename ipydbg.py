@@ -86,7 +86,28 @@ def get_dynamic_frames(chain):
       or typename == "PythonConsoleHost":
         continue
     yield f
-    
+
+def get_location(frame):
+    offset, mapping_result = frame.GetIP()
+
+    if frame.FrameType != CorFrameType.ILFrame:
+        return offset, None
+    reader = frame.Function.Module.SymbolReader
+    if reader == None:  
+        return offset, None
+    method = reader.GetMethod(SymbolToken(frame.FunctionToken))
+
+    real_sp = None
+    for sp in get_sequence_points(method):
+        if sp.offset > offset: 
+            break
+        real_sp = sp
+  
+    if real_sp == None:
+        return offset, None
+
+    return offset, real_sp
+        
 #--------------------------------------------
 # stepper functions
 
@@ -113,6 +134,15 @@ def get_step_ranges(thread, reader):
             return create_step_range(offset, sp.offset)
     return create_step_range(offset, frame.Function.ILCode.Size)
   
+def do_step(thread, step_in):
+    stepper = create_stepper(thread)
+    reader = thread.ActiveFrame.Function.Module.SymbolReader
+    if reader == None:
+        stepper.Step(step_in)
+    else:
+      range = get_step_ranges(thread, reader)
+      stepper.StepRange(step_in, range)      
+      
 infrastructure_methods =  ['TryGetExtraValue', 
     'TrySetExtraValue', 
     '.cctor', 
@@ -175,7 +205,7 @@ class IPyDebugProcess(object):
         
       
     def _input(self):
-        offset, sp = self._get_location(self.active_thread.ActiveFrame)
+        offset, sp = get_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
         self._print_source_line(sp, lines)
         while True:
@@ -197,7 +227,7 @@ class IPyDebugProcess(object):
                     if (k.Modifiers & ConsoleModifiers.Alt) != ConsoleModifiers.Alt \
                     else self.active_thread.ActiveChain.Frames
                 for f in get_frames:
-                    offset, sp = self._get_location(f)
+                    offset, sp = get_location(f)
                     method_info = f.GetMethodInfo()
                     print "  ",
                     if method_info != None:
@@ -205,11 +235,11 @@ class IPyDebugProcess(object):
                     print sp if sp != None else "(offset %d)" % offset, f.FrameType
             elif k.Key == ConsoleKey.S:
                 print "\nStepping"
-                self._do_step(self.active_thread, False)
+                do_step(self.active_thread, False)
                 return
             elif k.Key == ConsoleKey.I:
                 print "\nStepping In"
-                self._do_step(self.active_thread, True)
+                do_step(self.active_thread, True)
                 return                
             elif k.Key == ConsoleKey.O:
                 print "\nStepping Out"
@@ -273,17 +303,17 @@ class IPyDebugProcess(object):
 
     def OnBreakpoint(self, sender,e):
         method_info =  e.Thread.ActiveFrame.Function.GetMethodInfo()
-        offset, sp = self._get_location(e.Thread.ActiveFrame)
+        offset, sp = get_location(e.Thread.ActiveFrame)
         with CC.DarkGray:
           print "OnBreakpoint", method_info.Name, "Location:", sp if sp != None else "offset %d" % offset
         self._do_break_event(e)
 
     def OnStepComplete(self, sender,e):
-        offset, sp = self._get_location(e.Thread.ActiveFrame)
+        offset, sp = get_location(e.Thread.ActiveFrame)
         with CC.DarkGray:
           print "OnStepComplete Reason:", e.StepReason, "Location:", sp if sp != None else "offset %d" % offset
         if e.StepReason == CorDebugStepReason.STEP_CALL:
-          self._do_step(e.Thread, False)
+          do_step(e.Thread, False)
         else:
           self._do_break_event(e)
             
@@ -299,35 +329,7 @@ class IPyDebugProcess(object):
           self.source_files[filename] = File.ReadAllLines(filename)
         return self.source_files[filename] 
     
-    def _get_location(self, frame):
-        offset, mapping_result = frame.GetIP()
-  
-        if frame.FrameType != CorFrameType.ILFrame:
-            return offset, None
-        reader = frame.Function.Module.SymbolReader
-        if reader == None:  
-            return offset, None
-        method = reader.GetMethod(SymbolToken(frame.FunctionToken))
-  
-        real_sp = None
-        for sp in get_sequence_points(method):
-            if sp.offset > offset: 
-                break
-            real_sp = sp
-      
-        if real_sp == None:
-            return offset, None
-  
-        return offset, real_sp
-        
-    def _do_step(self, thread, step_in):
-        stepper = create_stepper(thread)
-        reader = thread.ActiveFrame.Function.Module.SymbolReader
-        if reader == None:
-            stepper.Step(step_in)
-        else:
-          range = get_step_ranges(thread, reader)
-          stepper.StepRange(step_in, range)       
+
       
 
 def run_debugger(py_file):
