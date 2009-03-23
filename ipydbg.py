@@ -407,6 +407,35 @@ class IPyDebugProcess(object):
       stepper.StepOut()
       return True
       
+    @inputcmd(_inputcmds, ConsoleKey.B)
+    def _breakpoint_mgmt(self, keyinfo):
+        with CC.Cyan:
+          print "\nBreakpoint Management"
+          while True:
+              print "BP» ",
+              k = Console.ReadKey()
+              
+              if k.Key == ConsoleKey.L:
+                print "\nList Breakpoints"   
+                for bp in self.active_appdomain.Breakpoints: 
+                  symmethod = bp.Function.GetSymbolMethod()
+                  real_sp = None
+                  for sp in get_sequence_points(symmethod):
+                      if sp.offset > bp.Offset: 
+                          break
+                      real_sp = sp
+                  
+                  print "%s:%d" % (sp.doc.URL, sp.start_line)
+              elif k.Key == ConsoleKey.D:
+                print "\nDelete Breakpoint Not Implemented"           
+              elif k.Key == ConsoleKey.A:
+                print "\nAdd Breakpoint"           
+              elif k.Key == ConsoleKey.Q:
+                  print "\nExiting BP Management"           
+                  break
+              else:
+                  print "\nPlease enter a valid command"
+            
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
