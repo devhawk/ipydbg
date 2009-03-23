@@ -145,7 +145,6 @@ class IPyDebugProcess(object):
         self.terminate_event = AutoResetEvent(False)
         self.break_event = AutoResetEvent(False)
 
-        self.sym_binder = SymbolBinder()
         self.initial_breakpoint = None
         self.source_files = dict()
 
