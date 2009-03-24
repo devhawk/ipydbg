@@ -213,11 +213,11 @@ class IPyDebugProcess(object):
 
     def _print_source_line(self, sp, lines):
       linecount = len(lines)
-      linecountstr = "%" + str(len(str(linecount))) + "d: "
+      linecount_fmt = "%%%dd: " % len(str(linecount))
 
       for i in range(sp.start_line, sp.end_line+1):
         with CC.Cyan:
-          Console.Write(linecountstr % i)
+          Console.Write(linecount_fmt % i)
         line = lines[i-1] if i <= linecount else ""
         start = sp.start_col if i==sp.start_line else 1
         end = sp.end_col if i == sp.end_line else len(line)+1
