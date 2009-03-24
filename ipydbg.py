@@ -424,12 +424,23 @@ class IPyDebugProcess(object):
                 print "\nDelete Breakpoint Not Implemented"           
               elif k.Key == ConsoleKey.A:
                 print "\nAdd Breakpoint Not Implemented"           
+                '''Console.Write(' ')
+                set_bp = Console.ReadLine().split(":")
+                for doc in self._get_symbol_docs():
+                   if '''
               elif k.Key == ConsoleKey.Q:
                   print "\nExiting BP Management"           
                   break
               else:
                   print "\nPlease enter a valid command"
             
+    def _get_symbol_docs(self):
+        for a in self.active_appdomain.Assemblies:
+            for m in a.Modules:
+                if m.IsDynamic and m.SymbolReader != None:
+                    for d in m.SymbolReader.GetDocuments():
+                        yield d
+               
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
