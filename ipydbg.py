@@ -145,6 +145,23 @@ def do_step(thread, step_in):
 #--------------------------------------------
 # value functions
 
+def get_locals(frame, scope=None, offset = None):
+    if scope == None:
+      for i in range(frame.GetLocalVariablesCount()):
+        yield "local_%d" % i, frame.GetLocalVariable(i)
+      
+    else:
+      for lv in scope.GetLocals():
+          v = frame.GetLocalVariable(lv.AddressField1)
+          yield lv.Name, v
+      
+      if offset == None:
+        offset = frame.GetIP()[0]
+
+      for s in scope.GetChildren():
+        if s.StartOffset <= offset and s.EndOffset >= offset:
+          for ret in get_locals(frame, s, offset): yield ret
+          
 #--------------------------------------------
 # main IPyDebugProcess class
   
@@ -207,14 +224,7 @@ class IPyDebugProcess(object):
           with CC.Yellow: Console.Write(" ^^^")
         Console.WriteLine()
 
-    def _get_locals(self, frame, offset, scope):
-        for lv in scope.GetLocals():
-            v = frame.GetLocalVariable(lv.AddressField1)
-            yield lv, v
-        
-        for s in scope.GetChildren():
-          for ret in self._get_locals(frame, offset, s):
-            yield ret
+
         
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
@@ -260,9 +270,14 @@ class IPyDebugProcess(object):
                     return unbox(value)
                     
                     
-                          
-                for lv,v in self._get_locals(frame, offset, symmethod.RootScope):
-                  v = get_value(v)
+                locals = list(get_locals(frame, symmethod.RootScope))
+                max_local_name_len = 0
+                for l in locals:
+                    max_local_name_len = max(max_local_name_len, len(l[0]))
+                local_fmt = "  %%-%ds %%s" % max_local_name_len
+                
+                for local_name,local_val in get_locals(frame, symmethod.RootScope):
+                  v = get_value(local_val)
                   if type(v) == str:
                     msg = v
                   elif v.Type == CorElementType.ELEMENT_TYPE_I4 or v.Type == CorElementType.ELEMENT_TYPE_BOOLEAN:
@@ -271,7 +286,7 @@ class IPyDebugProcess(object):
                     msg = v.Type
                   
                   
-                  print "  ", lv.Name, msg
+                  print local_fmt % (local_name, msg)
                 
             elif k.Key == ConsoleKey.T:
                 print "\nStack Trace"
