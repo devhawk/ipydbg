@@ -323,7 +323,7 @@ class IPyDebugProcess(object):
         self.break_event.Set()
         
     def _get_file(self,filename):
-        filename = Path.GetFileName(filename)
+        filename = Path.GetFullPath(filename)
         if not filename in self.source_files:
           self.source_files[filename] = File.ReadAllLines(filename)
         return self.source_files[filename] 
