@@ -169,7 +169,38 @@ def get_locals(frame, scope=None, offset = None):
     for s in scope.GetChildren():
       if s.StartOffset <= offset and s.EndOffset >= offset:
         for ret in get_locals(frame, s, offset): yield ret
-          
+    
+def value_to_str(value):
+    def deref(value):
+        while True:
+            rv = value.CastToReferenceValue()
+            if rv == None: break
+            if (rv.IsNull): return None
+            newValue = rv.Dereference()
+            if newValue == None: break
+            value = newValue
+        return value
+    def unbox(value):
+        boxVal = value.CastToBoxValue()
+        if boxVal != None:
+          return boxVal.GetObject()
+        return value
+    def get_value(value):
+        if value == None: return "<N/A>"
+        value = deref(value)
+        if value == None: return "<None>"
+        return unbox(value)
+        
+    v = get_value(value)
+    if type(v) == str:
+      msg = v
+    elif v.Type == CorElementType.ELEMENT_TYPE_I4 or v.Type == CorElementType.ELEMENT_TYPE_BOOLEAN:
+      msg = v.CastToGenericValue().GetValue()
+    else:
+      msg = v.Type
+      
+    return msg
+  
 #--------------------------------------------
 # main IPyDebugProcess class
   
@@ -253,46 +284,14 @@ class IPyDebugProcess(object):
                 return
             elif k.Key == ConsoleKey.L:
                 print "\nLocals"
-                frame = self.active_thread.ActiveFrame
-                
-                def deref(value):
-                    while True:
-                        rv = value.CastToReferenceValue()
-                        if rv == None: break
-                        if (rv.IsNull): return None
-                        newValue = rv.Dereference()
-                        if newValue == None: break
-                        value = newValue
-                    return value
-                def unbox(value):
-                    boxVal = value.CastToBoxValue()
-                    if boxVal != None:
-                      return boxVal.GetObject()
-                    return value
-                def get_value(value):
-                    if value == None: return "<N/A>"
-                    value = deref(value)
-                    if value == None: return "<None>"
-                    return unbox(value)
-                    
-                    
-                locals = list(get_locals(frame))
+                locals = list(get_locals(self.active_thread.ActiveFrame))
                 max_local_name_len = 0
                 for l in locals:
                     max_local_name_len = max(max_local_name_len, len(l[0]))
                 local_fmt = "  %%-%ds %%s" % max_local_name_len
                 
                 for local_name,local_val in locals:
-                  v = get_value(local_val)
-                  if type(v) == str:
-                    msg = v
-                  elif v.Type == CorElementType.ELEMENT_TYPE_I4 or v.Type == CorElementType.ELEMENT_TYPE_BOOLEAN:
-                    msg = v.CastToGenericValue().GetValue()
-                  else:
-                    msg = v.Type
-                  
-                  
-                  print local_fmt % (local_name, msg)
+                  print local_fmt % (local_name, value_to_str(local_val))
                 
             elif k.Key == ConsoleKey.T:
                 print "\nStack Trace"
