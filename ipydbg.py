@@ -189,20 +189,28 @@ class IPyDebugProcess(object):
             if i == 0:
                 break
             self._input()
-    
+
     def _print_source_line(self, sp, lines):
-      line = lines[sp.start_line-1]
-      with CC.Gray:
-        Console.Write("%d: " % sp.start_line)
-        Console.Write(line.Substring(0, sp.start_col-1))
-        with CC.Yellow:
-          if sp.start_col > len(line):
-            Console.Write(" ^^^")
-          else:
-            Console.Write(line.Substring(sp.start_col-1, sp.end_col - sp.start_col))
-        Console.WriteLine(line.Substring(sp.end_col-1))
+      linecount = len(lines)
+      linecountstr = "%" + str(len(str(linecount))) + "d: "
+
+      for i in range(sp.start_line, sp.end_line+1):
+        with CC.Cyan:
+          Console.Write(linecountstr % i)
+        line = lines[i-1] if i <= linecount else ""
+        start = sp.start_col if i==sp.start_line else 1
+        end = sp.end_col if i == sp.end_line else len(line)+1
         
-      
+        with CC.Gray:
+          Console.Write(line.Substring(0, start-1))
+          with CC.Yellow:
+            Console.Write(line.Substring(start-1, end-start))
+          Console.Write(line.Substring(end-1))
+
+        if sp.start_line == sp.end_line == i and sp.start_col == sp.end_col:
+          with CC.Yellow: Console.Write(" ^^^")
+        Console.WriteLine()
+
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
