@@ -1,0 +1,2568 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" media="screen" href="/~d/styles/rss2full.xsl"?><?xml-stylesheet type="text/css" media="screen" href="http://feeds2.feedburner.com/~d/styles/itemcontent.css"?><rss xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:feedburner="http://rssnamespace.org/feedburner/ext/1.0" version="2.0"><channel><title>DevHawk</title><link>http://devhawk.net/</link><description>Passion * Technology * Ruthless Competence</description><language>en-us</language><copyright>Harry Pierson</copyright><managingEditor>harry@devhawk.net</managingEditor><lastBuildDate>Fri, 13 Mar 2009 10:31:17 PDT</lastBuildDate><generator>newtelligence dasBlog 2.0.7226.0</generator><geo:lat>47.640972</geo:lat><geo:long>-122.033189</geo:long><atom10:link xmlns:atom10="http://www.w3.org/2005/Atom" rel="self" href="http://feeds2.feedburner.com/Devhawk" type="application/rss+xml" /><feedburner:browserFriendly>(Enter a personal message you would like to have appear at the top of your feed.)</feedburner:browserFriendly><item><title>Writing an IronPython Debugger: Stepping Thru Code</title><link>http://feedproxy.google.com/~r/Devhawk/~3/_duUnJjUAB0/Writing+An+IronPython+Debugger+Stepping+Thru+Code.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Fri, 13 Mar 2009 10:31:17 PDT</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,be843f79-26c2-4593-95ae-b271fe4442b3.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+So far, I’ve written seven posts about my IronPython debugger, but frankly it isn’t
+very functional yet. It <a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx">runs</a>, <a href="http://devhawk.net/2009/03/02/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx">breaks
+on the first line</a> and can <a href="http://devhawk.net/2009/03/09/Writing+An+IronPython+Debugger+Dynamic+Stack+Trace.aspx">show
+a stack trace</a>. Not exactly <a href="http://www.joltawards.com/">Jolt award</a> material.
+In this post, I’m going to add one of the core functions of any debugger: stepping.
+Where previously I’ve written a bunch of code but had little to show in terms of features,
+now I’m getting three new features (basic step, step in and step out) at once!
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">def</span> _input(self): 
+<br>
+  <span style="color: green">#remaining _input code omitted for clarity</span><br>
+  <span style="color: blue">elif</span> k.Key == ConsoleKey.S: 
+<br>
+      <span style="color: blue">print</span> <span style="color: maroon">"\nStepping"</span><br>
+      self._do_step(<span style="color: maroon">False</span>) 
+<br>
+      <span style="color: blue">return</span><br>
+  <span style="color: blue">elif</span> k.Key == ConsoleKey.I: 
+<br>
+      <span style="color: blue">print</span> <span style="color: maroon">"\nStepping
+In"</span><br>
+      self._do_step(<span style="color: maroon">True</span>) 
+<br>
+      <span style="color: blue">return</span>                 
+<br>
+  <span style="color: blue">elif</span> k.Key == ConsoleKey.O: 
+<br>
+      <span style="color: blue">print</span> <span style="color: maroon">"\nStepping
+Out"</span><br>
+      stepper = create_stepper(self.active_thread) 
+<br>
+      stepper.StepOut() 
+<br><br><span style="color: blue">def</span> _do_step(self, step_in): 
+<br>
+  stepper = create_stepper(self.active_thread) 
+<br>
+  mod = self.active_thread.ActiveFrame.Function.Module 
+<br>
+  <span style="color: blue">if</span> mod <span style="color: blue">not</span> <span style="color: blue">in</span> self.symbol_readers: 
+<br>
+      stepper.Step(step_in) 
+<br>
+  <span style="color: blue">else</span>: 
+<br>
+    range = get_step_ranges(self.active_thread, self.symbol_readers[mod]) 
+<br>
+    stepper.StepRange(step_in, range) 
+</div>
+        <p>
+Here you can see the _input clauses for step, step in and step out. Of the three,
+step out is the simplest to implement: create the stepper object and call StepOut.
+For step and step in, I could simply call Step (the boolean argument indicates if
+you want to step into or over functions) but that only steps a single IL statement.
+The vast majority of the time there are multiple IL instructions for every line of
+source code, so IL statement stepping is very tedious. As we learned when <a href="http://devhawk.net/2009/03/02/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx">setting
+a breakpoint</a>, debug symbols contain sequence points that map between source and
+IL locations. If they’re available, I use the sequence points to determine the range
+of IL statements to step over so that I can step single source statements instead. 
+</p>
+        <p>
+The stepping code above depends on three helper functions defined at global scope.
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">def</span> create_stepper(thread): 
+<br>
+  stepper = thread.ActiveFrame.CreateStepper() 
+<br>
+  stepper.SetUnmappedStopMask(CorDebugUnmappedStop.STOP_NONE) 
+<br>
+  <span style="color: blue">return</span> stepper  
+<br>
+   
+<br><span style="color: blue">def</span> create_step_range(start, end): 
+<br>
+  range = Array.CreateInstance(COR_DEBUG_STEP_RANGE, <span style="color: maroon">1</span>) 
+<br>
+  range[<span style="color: maroon">0</span>] = COR_DEBUG_STEP_RANGE(startOffset
+= UInt32(start), 
+<br>
+                                 
+endOffset = UInt32(end)) 
+<br>
+  <span style="color: blue">return</span> range 
+<br>
+   
+<br><span style="color: blue">def</span> get_step_ranges(thread, reader): 
+<br>
+    frame = thread.ActiveFrame 
+<br>
+    offset, mapResult = frame.GetIP() 
+<br>
+    method = reader.GetMethod(SymbolToken(frame.FunctionToken)) 
+<br>
+    <span style="color: blue">for</span> sp <span style="color: blue">in</span> get_sequence_points(method): 
+<br>
+        <span style="color: blue">if</span> sp.offset
+&gt; offset: 
+<br>
+            <span style="color: blue">return</span> create_step_range(offset,
+sp.offset) 
+<br>
+    <span style="color: blue">return</span> create_step_range(offset,
+frame.Function.ILCode.Size)           
+</div>
+        <p>
+The first function, create_stepper, simply constructs and configures the stepper object.
+The call to SetUnmappedStopMask tells the debugger not to stop if it encounters code
+that can’t be mapped to IL. If you need to debug at that level, ipydbg is *not* for
+you.
+</p>
+        <p>
+Next is create_step_range, which exists purely for .NET interop purposes. There are
+three interop warts hidden in this function. First is creating a .NET array of COR_DEBUG_STEP_RANGE
+structs. Every time I write Array code like this, I wish for a CreateFromCollection
+static method on Array. However, in this case it isn’t that big a deal since it’s
+a one element array. Second wart is having to set the values of COR_DEBUG_STEP_RANGE
+via constructor keyword arguments. It turns out that IronPython disallows direct updates
+to value type fields (<a href="http://ironpython.codeplex.com/Wiki/View.aspx?title=Value%20Types">read
+this for the reason why</a>). Instead, I pass in the field values into the constructor
+as keyword arguments. Finally, you have to explicitly convert the start and end offsets
+to a unsigned int in order to set the offset fields in the COR_DEBUG_STEP_RANGE struct
+constructor.
+</p>
+        <p>
+Finally is get_step_ranges, which iterates thru the list of sequence points in the
+current method looking for the one with the smallest offset that is larger than the
+current offset position. If it can’t find a matching sequence point, it sets the range
+to the end of the current function. The start range offset is always the current offset.
+I did make a significant change to get_sequence_points – it no longer yields sequence
+points that have a start line of 0xfeefee. <a href="http://blogs.msdn.com/jmstall/archive/2005/06/19/FeeFee_SequencePoints.aspx">By
+convention</a>, that indicates a sequence point to be skipped. Originally, the logic
+to ignore 0xfeefee sequence points was in get_location. But when I originally wrote
+get_step_ranges, it had essentially the same sequence point skipping logic, so I moved
+it to get_location instead.
+</p>
+        <p>
+Technically, I’ve built three new features but the reality is that if you end up in
+IronPython infrastructure code it’s really hard to find your way back to python code.
+Step in is particularly useless right now. Luckily, the .NET debugger API supports
+a feature called “<a href="http://blogs.msdn.com/jmstall/archive/2004/12/31/344832.aspx">Just
+My Code</a>” that will make stepping much more useful. In the meantime, the <a href="http://github.com/devhawk/ipydbg/tree/0840b8cf3918feb70311bc0d0a8e0cb0f06fc37c">latest
+version of ipydbg</a> is up on GitHub as usual.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=be843f79-26c2-4593-95ae-b271fe4442b3"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=_duUnJjUAB0:W1sUEXfPAD4:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=_duUnJjUAB0:W1sUEXfPAD4:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=_duUnJjUAB0:W1sUEXfPAD4:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=_duUnJjUAB0:W1sUEXfPAD4:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=_duUnJjUAB0:W1sUEXfPAD4:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=_duUnJjUAB0:W1sUEXfPAD4:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/_duUnJjUAB0" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+So far, I’ve written seven posts about my IronPython debugger, but frankly it isn’t
+very functional yet. It &lt;a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx"&gt;runs&lt;/a&gt;, &lt;a href="http://devhawk.net/2009/03/02/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx"&gt;breaks
+on the first line&lt;/a&gt; and can &lt;a href="http://devhawk.net/2009/03/09/Writing+An+IronPython+Debugger+Dynamic+Stack+Trace.aspx"&gt;show
+a stack trace&lt;/a&gt;. Not exactly &lt;a href="http://www.joltawards.com/"&gt;Jolt award&lt;/a&gt; material.
+In this post, I’m going to add one of the core functions of any debugger: stepping.
+Where previously I’ve written a bunch of code but had little to show in terms of features,
+now I’m getting three new features (basic step, step in and step out) at once!
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;def&lt;/span&gt; _input(self): 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: green"&gt;#remaining _input code omitted for clarity&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;elif&lt;/span&gt; k.Key == ConsoleKey.S: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;\nStepping&amp;quot;&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; self._do_step(&lt;span style="color: maroon"&gt;False&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;elif&lt;/span&gt; k.Key == ConsoleKey.I: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;\nStepping
+In&amp;quot;&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; self._do_step(&lt;span style="color: maroon"&gt;True&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;elif&lt;/span&gt; k.Key == ConsoleKey.O: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;\nStepping
+Out&amp;quot;&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; stepper = create_stepper(self.active_thread) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; stepper.StepOut() 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; _do_step(self, step_in): 
+&lt;br /&gt;
+&amp;#160; stepper = create_stepper(self.active_thread) 
+&lt;br /&gt;
+&amp;#160; mod = self.active_thread.ActiveFrame.Function.Module 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; mod &lt;span style="color: blue"&gt;not&lt;/span&gt;&amp;#160;&lt;span style="color: blue"&gt;in&lt;/span&gt; self.symbol_readers: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; stepper.Step(step_in) 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;else&lt;/span&gt;: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; range = get_step_ranges(self.active_thread, self.symbol_readers[mod]) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; stepper.StepRange(step_in, range) 
+&lt;/div&gt;
+&lt;p&gt;
+Here you can see the _input clauses for step, step in and step out. Of the three,
+step out is the simplest to implement: create the stepper object and call StepOut.
+For step and step in, I could simply call Step (the boolean argument indicates if
+you want to step into or over functions) but that only steps a single IL statement.
+The vast majority of the time there are multiple IL instructions for every line of
+source code, so IL statement stepping is very tedious. As we learned when &lt;a href="http://devhawk.net/2009/03/02/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx"&gt;setting
+a breakpoint&lt;/a&gt;, debug symbols contain sequence points that map between source and
+IL locations. If they’re available, I use the sequence points to determine the range
+of IL statements to step over so that I can step single source statements instead. 
+&lt;/p&gt;
+&lt;p&gt;
+The stepping code above depends on three helper functions defined at global scope.
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;def&lt;/span&gt; create_stepper(thread): 
+&lt;br /&gt;
+&amp;#160; stepper = thread.ActiveFrame.CreateStepper() 
+&lt;br /&gt;
+&amp;#160; stepper.SetUnmappedStopMask(CorDebugUnmappedStop.STOP_NONE) 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; stepper&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; create_step_range(start, end): 
+&lt;br /&gt;
+&amp;#160; range = Array.CreateInstance(COR_DEBUG_STEP_RANGE, &lt;span style="color: maroon"&gt;1&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160; range[&lt;span style="color: maroon"&gt;0&lt;/span&gt;] = COR_DEBUG_STEP_RANGE(startOffset
+= UInt32(start), 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;
+endOffset = UInt32(end)) 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; range 
+&lt;br /&gt;
+&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; get_step_ranges(thread, reader): 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; frame = thread.ActiveFrame 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; offset, mapResult = frame.GetIP() 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; method = reader.GetMethod(SymbolToken(frame.FunctionToken)) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;for&lt;/span&gt; sp &lt;span style="color: blue"&gt;in&lt;/span&gt; get_sequence_points(method): 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; sp.offset
+&amp;gt; offset: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; create_step_range(offset,
+sp.offset) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; create_step_range(offset,
+frame.Function.ILCode.Size)&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;/div&gt;
+&lt;p&gt;
+The first function, create_stepper, simply constructs and configures the stepper object.
+The call to SetUnmappedStopMask tells the debugger not to stop if it encounters code
+that can’t be mapped to IL. If you need to debug at that level, ipydbg is *not* for
+you.
+&lt;/p&gt;
+&lt;p&gt;
+Next is create_step_range, which exists purely for .NET interop purposes. There are
+three interop warts hidden in this function. First is creating a .NET array of COR_DEBUG_STEP_RANGE
+structs. Every time I write Array code like this, I wish for a CreateFromCollection
+static method on Array. However, in this case it isn’t that big a deal since it’s
+a one element array. Second wart is having to set the values of COR_DEBUG_STEP_RANGE
+via constructor keyword arguments. It turns out that IronPython disallows direct updates
+to value type fields (&lt;a href="http://ironpython.codeplex.com/Wiki/View.aspx?title=Value%20Types"&gt;read
+this for the reason why&lt;/a&gt;). Instead, I pass in the field values into the constructor
+as keyword arguments. Finally, you have to explicitly convert the start and end offsets
+to a unsigned int in order to set the offset fields in the COR_DEBUG_STEP_RANGE struct
+constructor.
+&lt;/p&gt;
+&lt;p&gt;
+Finally is get_step_ranges, which iterates thru the list of sequence points in the
+current method looking for the one with the smallest offset that is larger than the
+current offset position. If it can’t find a matching sequence point, it sets the range
+to the end of the current function. The start range offset is always the current offset.
+I did make a significant change to get_sequence_points – it no longer yields sequence
+points that have a start line of 0xfeefee. &lt;a href="http://blogs.msdn.com/jmstall/archive/2005/06/19/FeeFee_SequencePoints.aspx"&gt;By
+convention&lt;/a&gt;, that indicates a sequence point to be skipped. Originally, the logic
+to ignore 0xfeefee sequence points was in get_location. But when I originally wrote
+get_step_ranges, it had essentially the same sequence point skipping logic, so I moved
+it to get_location instead.
+&lt;/p&gt;
+&lt;p&gt;
+Technically, I’ve built three new features but the reality is that if you end up in
+IronPython infrastructure code it’s really hard to find your way back to python code.
+Step in is particularly useless right now. Luckily, the .NET debugger API supports
+a feature called “&lt;a href="http://blogs.msdn.com/jmstall/archive/2004/12/31/344832.aspx"&gt;Just
+My Code&lt;/a&gt;” that will make stepping much more useful. In the meantime, the &lt;a href="http://github.com/devhawk/ipydbg/tree/0840b8cf3918feb70311bc0d0a8e0cb0f06fc37c"&gt;latest
+version of ipydbg&lt;/a&gt; is up on GitHub as usual.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=be843f79-26c2-4593-95ae-b271fe4442b3" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=be843f79-26c2-4593-95ae-b271fe4442b3</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,be843f79-26c2-4593-95ae-b271fe4442b3.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,be843f79-26c2-4593-95ae-b271fe4442b3.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=be843f79-26c2-4593-95ae-b271fe4442b3</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/13/Writing+An+IronPython+Debugger+Stepping+Thru+Code.aspx</feedburner:origLink></item><item><title>VB Dev Lead Position Open</title><link>http://feedproxy.google.com/~r/Devhawk/~3/MtJGAqjPCZE/VB+Dev+Lead+Position+Open.aspx</link><category>Development/Lanugages</category><category>Other/Working at MSFT</category><category>Visual Basic</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Thu, 12 Mar 2009 10:37:54 PDT</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,b5d73740-3d35-44de-b8aa-ffdcf4f558dd.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+In case you’re job hunting, the <a href="http://blogs.msdn.com/vbteam/">VB team</a> has
+a <a href="http://members.microsoft.com/careers/search/details.aspx?JobID=99F8412E-85F6-4745-8F97-A3A17AC90CC1">position
+open for a dev lead</a>:
+</p>
+        <blockquote>
+          <p>
+The Visual Basic team has a long history of delivering great value to our customers,
+and we are continuing that in the Dev10 release of Visual Studio. We’re looking for
+a Development Lead to help guide these efforts as well as shape future versions of
+the compiler. 
+</p>
+          <p>
+The Visual Studio Languages group (VSL) develops VB, C#, F#, IronPython and IronRuby.
+As a member of this product unit, you’ll have the opportunity to work with others
+developing compilers and IDEs targeting the .NET runtime. You’ll benefit from their
+experience and contribute best practices and methodologies of your own. In VSL, developers
+work closely with their QA team, and we are committed to delivering the best value
+for our customers at very high quality.
+</p>
+          <p>
+As a Development Lead on the Visual Basic compiler, you’ll be the hand at the tiller
+of VB.NET compiler development. Specifically, you will:
+</p>
+          <ul>
+            <li>
+Manage the day-to-day duties of the compiler and runtime development team, ensuring
+on-schedule delivery of high quality components.</li>
+            <li>
+Help chart the direction the compiler team takes by prioritizing efforts in coordination
+with your counterparts in QA and PM.</li>
+            <li>
+Contribute to the design of the Visual Basic programming language.</li>
+            <li>
+Mentor your team of developers to continue their career growth.</li>
+            <li>
+Help shape the engineering environment and procedures in Visual Studio Languages.</li>
+            <li>
+Work closely with the IDE team to help them provide a top notch editing and debugging
+experience.</li>
+          </ul>
+          <p>
+To be successful, you’ll need the following:
+</p>
+          <ul>
+            <li>
+A demonstrated aptitude for managing a team of high-caliber developers.</li>
+            <li>
+Excellent communication, collaboration and negotiation skills and the ability to drive
+open issues to closure.</li>
+            <li>
+Strong architectural sense and a working knowledge of the fundamentals of compiler
+design.</li>
+            <li>
+Passion for delivering customer solutions and quality software in general.</li>
+            <li>
+Working knowledge of the managed runtime environment is a strong plus. 
+</li>
+          </ul>
+        </blockquote>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=b5d73740-3d35-44de-b8aa-ffdcf4f558dd"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=MtJGAqjPCZE:IQvoKCvkAZk:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=MtJGAqjPCZE:IQvoKCvkAZk:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=MtJGAqjPCZE:IQvoKCvkAZk:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=MtJGAqjPCZE:IQvoKCvkAZk:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=MtJGAqjPCZE:IQvoKCvkAZk:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=MtJGAqjPCZE:IQvoKCvkAZk:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/MtJGAqjPCZE" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+In case you’re job hunting, the &lt;a href="http://blogs.msdn.com/vbteam/"&gt;VB team&lt;/a&gt; has
+a &lt;a href="http://members.microsoft.com/careers/search/details.aspx?JobID=99F8412E-85F6-4745-8F97-A3A17AC90CC1"&gt;position
+open for a dev lead&lt;/a&gt;:
+&lt;/p&gt;
+&lt;blockquote&gt; 
+&lt;p&gt;
+The Visual Basic team has a long history of delivering great value to our customers,
+and we are continuing that in the Dev10 release of Visual Studio. We’re looking for
+a Development Lead to help guide these efforts as well as shape future versions of
+the compiler. 
+&lt;/p&gt;
+&lt;p&gt;
+The Visual Studio Languages group (VSL) develops VB, C#, F#, IronPython and IronRuby.
+As a member of this product unit, you’ll have the opportunity to work with others
+developing compilers and IDEs targeting the .NET runtime. You’ll benefit from their
+experience and contribute best practices and methodologies of your own. In VSL, developers
+work closely with their QA team, and we are committed to delivering the best value
+for our customers at very high quality.
+&lt;/p&gt;
+&lt;p&gt;
+As a Development Lead on the Visual Basic compiler, you’ll be the hand at the tiller
+of VB.NET compiler development. Specifically, you will:
+&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+Manage the day-to-day duties of the compiler and runtime development team, ensuring
+on-schedule delivery of high quality components.&lt;/li&gt;
+&lt;li&gt;
+Help chart the direction the compiler team takes by prioritizing efforts in coordination
+with your counterparts in QA and PM.&lt;/li&gt;
+&lt;li&gt;
+Contribute to the design of the Visual Basic programming language.&lt;/li&gt;
+&lt;li&gt;
+Mentor your team of developers to continue their career growth.&lt;/li&gt;
+&lt;li&gt;
+Help shape the engineering environment and procedures in Visual Studio Languages.&lt;/li&gt;
+&lt;li&gt;
+Work closely with the IDE team to help them provide a top notch editing and debugging
+experience.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;
+To be successful, you’ll need the following:
+&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+A demonstrated aptitude for managing a team of high-caliber developers.&lt;/li&gt;
+&lt;li&gt;
+Excellent communication, collaboration and negotiation skills and the ability to drive
+open issues to closure.&lt;/li&gt;
+&lt;li&gt;
+Strong architectural sense and a working knowledge of the fundamentals of compiler
+design.&lt;/li&gt;
+&lt;li&gt;
+Passion for delivering customer solutions and quality software in general.&lt;/li&gt;
+&lt;li&gt;
+Working knowledge of the managed runtime environment is a strong plus. 
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/blockquote&gt;&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=b5d73740-3d35-44de-b8aa-ffdcf4f558dd" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=b5d73740-3d35-44de-b8aa-ffdcf4f558dd</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,b5d73740-3d35-44de-b8aa-ffdcf4f558dd.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,b5d73740-3d35-44de-b8aa-ffdcf4f558dd.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=b5d73740-3d35-44de-b8aa-ffdcf4f558dd</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/12/VB+Dev+Lead+Position+Open.aspx</feedburner:origLink></item><item><title>Writing an IronPython Debugger: Refactoring</title><link>http://feedproxy.google.com/~r/Devhawk/~3/8zlk8bB2COo/Writing+An+IronPython+Debugger+Refactoring.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Wed, 11 Mar 2009 20:42:22 PDT</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,c1a4f587-9497-48b8-b958-fc95c8127e73.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+When we <a href="http://github.com/devhawk/ipydbg/blob/c33cf75c4e9273a21ada00abe2403c392e4ca0a0/ipydbg.py">last
+left</a> ipydbg, it was up to about 200 lines of code. Not bad in terms of overall
+length, but I started to detect some <a href="http://en.wikipedia.org/wiki/Code_smell">code
+smell</a>. I was relying pretty heavily on global variables and the structure of my
+code made it difficult to control how the debugger was run. I wanted to change ipydbg
+so it would automatically spin up an MTA thread if I forgot to add the –X:MTA command
+line parameter. But since by debugger and process objects were global, they’d get
+created on the main thread of ipydbg, regardless if it was STA or MTA. So for this
+“<a href="http://github.com/devhawk/ipydbg/tree/117cdce71a5ee8880e8bc991813534b6fba0a6d5">release</a>”
+(I’d say I’m almost to version 0.0.0.1), I decided on focusing on enginering and refactoring
+rather than new features. 
+</p>
+        <p>
+The big new addition is the <a href="http://github.com/devhawk/ipydbg/blob/117cdce71a5ee8880e8bc991813534b6fba0a6d5/ipydbg.py#L90">IPyDebugProcess
+class</a>, which is clearly the workhorse of the application. All of the previously
+global variables are now class instance variables on IPyDebugProcess. Input and run
+along with all the event handlers as well as do_break_event and get_location are now
+class methods, as they need to access instance variables (setting the break event,
+accessing the symbol reader dictionary, etc.). Functions that didn’t need to access
+instance variables (get_sequence_points, create_breakpoint, get_dynamic_frames and
+get_method_info_for_frame) I left as top-level functions. If they get more complex,
+I may break them out into their own modules, but for now I left them in ipydbg.py.
+</p>
+        <p>
+The conversion process was fairly trivial. I had to add “self.” lots of places and
+change the indention level all over but that was pretty much it. Once I finished the
+conversion, I was able to add the run_debugger function to handle the thread creation,
+if necessary. 
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">def</span> run_debugger(py_file): 
+<br>
+    <span style="color: blue">if</span> Thread.CurrentThread.GetApartmentState()
+== ApartmentState.STA: 
+<br>
+        t = Thread(ParameterizedThreadStart(run_debugger)) 
+<br>
+        t.SetApartmentState(ApartmentState.MTA) 
+<br>
+        t.Start(py_file) 
+<br>
+        t.Join()    
+<br>
+    <span style="color: blue">else</span>: 
+<br>
+        p = IPyDebugProcess() 
+<br>
+        p.run(py_file) 
+<br><br><span style="color: blue">if</span> __name__ == <span style="color: maroon">"__main__"</span>:         
+<br>
+    run_debugger(sys.argv[<span style="color: maroon">1</span>])         
+<br></div>
+        <p>
+Originally, I tried to put this logic in IPyDebugProcess.run. However, since I’m <a href="http://github.com/devhawk/ipydbg/blob/117cdce71a5ee8880e8bc991813534b6fba0a6d5/ipydbg.py#L92">creating
+the debugger object</a> in the __init__ function, that meant it would be created on
+the wrong thread. I could have moved the debugger creation to the run method or move
+the thread management code to __init__, but I decided to factor that logic into a
+separate function completely. Felt cleaner that way.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=c1a4f587-9497-48b8-b958-fc95c8127e73"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=8zlk8bB2COo:JsK_zBCMSOc:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=8zlk8bB2COo:JsK_zBCMSOc:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=8zlk8bB2COo:JsK_zBCMSOc:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=8zlk8bB2COo:JsK_zBCMSOc:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=8zlk8bB2COo:JsK_zBCMSOc:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=8zlk8bB2COo:JsK_zBCMSOc:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/8zlk8bB2COo" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+When we &lt;a href="http://github.com/devhawk/ipydbg/blob/c33cf75c4e9273a21ada00abe2403c392e4ca0a0/ipydbg.py"&gt;last
+left&lt;/a&gt; ipydbg, it was up to about 200 lines of code. Not bad in terms of overall
+length, but I started to detect some &lt;a href="http://en.wikipedia.org/wiki/Code_smell"&gt;code
+smell&lt;/a&gt;. I was relying pretty heavily on global variables and the structure of my
+code made it difficult to control how the debugger was run. I wanted to change ipydbg
+so it would automatically spin up an MTA thread if I forgot to add the –X:MTA command
+line parameter. But since by debugger and process objects were global, they’d get
+created on the main thread of ipydbg, regardless if it was STA or MTA. So for this
+“&lt;a href="http://github.com/devhawk/ipydbg/tree/117cdce71a5ee8880e8bc991813534b6fba0a6d5"&gt;release&lt;/a&gt;”
+(I’d say I’m almost to version 0.0.0.1), I decided on focusing on enginering and refactoring
+rather than new features. 
+&lt;/p&gt;
+&lt;p&gt;
+The big new addition is the &lt;a href="http://github.com/devhawk/ipydbg/blob/117cdce71a5ee8880e8bc991813534b6fba0a6d5/ipydbg.py#L90"&gt;IPyDebugProcess
+class&lt;/a&gt;, which is clearly the workhorse of the application. All of the previously
+global variables are now class instance variables on IPyDebugProcess. Input and run
+along with all the event handlers as well as do_break_event and get_location are now
+class methods, as they need to access instance variables (setting the break event,
+accessing the symbol reader dictionary, etc.). Functions that didn’t need to access
+instance variables (get_sequence_points, create_breakpoint, get_dynamic_frames and
+get_method_info_for_frame) I left as top-level functions. If they get more complex,
+I may break them out into their own modules, but for now I left them in ipydbg.py.
+&lt;/p&gt;
+&lt;p&gt;
+The conversion process was fairly trivial. I had to add “self.” lots of places and
+change the indention level all over but that was pretty much it. Once I finished the
+conversion, I was able to add the run_debugger function to handle the thread creation,
+if necessary. 
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;def&lt;/span&gt; run_debugger(py_file): 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; Thread.CurrentThread.GetApartmentState()
+== ApartmentState.STA: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; t = Thread(ParameterizedThreadStart(run_debugger)) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; t.SetApartmentState(ApartmentState.MTA) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; t.Start(py_file) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; t.Join()&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;else&lt;/span&gt;: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; p = IPyDebugProcess() 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; p.run(py_file) 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;if&lt;/span&gt; __name__ == &lt;span style="color: maroon"&gt;&amp;quot;__main__&amp;quot;&lt;/span&gt;:&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; run_debugger(sys.argv[&lt;span style="color: maroon"&gt;1&lt;/span&gt;])&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;/div&gt;
+&lt;p&gt;
+Originally, I tried to put this logic in IPyDebugProcess.run. However, since I’m &lt;a href="http://github.com/devhawk/ipydbg/blob/117cdce71a5ee8880e8bc991813534b6fba0a6d5/ipydbg.py#L92"&gt;creating
+the debugger object&lt;/a&gt; in the __init__ function, that meant it would be created on
+the wrong thread. I could have moved the debugger creation to the run method or move
+the thread management code to __init__, but I decided to factor that logic into a
+separate function completely. Felt cleaner that way.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=c1a4f587-9497-48b8-b958-fc95c8127e73" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=c1a4f587-9497-48b8-b958-fc95c8127e73</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,c1a4f587-9497-48b8-b958-fc95c8127e73.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,c1a4f587-9497-48b8-b958-fc95c8127e73.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=c1a4f587-9497-48b8-b958-fc95c8127e73</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/12/Writing+An+IronPython+Debugger+Refactoring.aspx</feedburner:origLink></item><item><title>IronPython at PyCon</title><link>http://feedproxy.google.com/~r/Devhawk/~3/UPQdnUp2GRw/IronPython+At+PyCon.aspx</link><category>IronPython</category><category>Python</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Wed, 11 Mar 2009 16:22:31 PDT</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,51071c10-46be-4ed0-bf4b-ba671aa7e4de.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+Here’s a quick quiz. Which of these tasks is harder to accomplish:
+</p>
+        <ol>
+          <li>
+Getting $6,000 from a variety of groups within Microsoft to pay for a Gold <a href="http://us.pycon.org/2009/">PyCon
+2009</a> sponsorship.</li>
+          <li>
+Sending <a href="http://www.python.org/psf/">PSF</a> a check</li>
+        </ol>
+        <p>
+If you guessed #2, you’d be right. It’s amazing how difficult the seemly trivial task
+of “give those PSF folks money” turned out to be. But it’s done now, and you can see
+the MS logo there on the side of all the PyCon pages.
+</p>
+        <p>
+In addition to the sponsorship, there are some great looking IronPython sessions at
+PyCon. 
+</p>
+        <ul>
+          <li>
+            <a href="http://www.voidspace.org.uk/python/weblog/index.shtml">Michael Foord</a> and <a href="http://www.tartley.com">Jonathan
+Hartley</a> are running a <a href="http://us.pycon.org/2009/tutorials/schedule/1AM3/">Developing
+with IronPython</a> tutorial. Michael is also delivering a talk <a href="http://us.pycon.org/2009/conference/schedule/event/P1/">Functional
+Testing of Desktop Applications</a>.</li>
+          <li>
+Jim Hugunin is delivering an invited talk <a href="http://us.pycon.org/2009/conference/schedule/event/P117/">IronPython:
+Directions, Data and Demos </a></li>
+          <li>
+Dino Viehland is sitting on the <a href="http://us.pycon.org/2009/conference/schedule/event/21/">Python
+VMs panel</a> and doing a talk <a href="http://us.pycon.org/2009/conference/schedule/event/86/">IronPython
+Implementation</a></li>
+          <li>
+            <a href="http://www.codinggeekette.com/">Sarah Dutkiewicz</a> (aka Coding Geekette)
+is doing a talk <a href="http://us.pycon.org/2009/conference/schedule/event/P12/">Pumping
+Iron into Python: Intro to FePy </a></li>
+        </ul>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=51071c10-46be-4ed0-bf4b-ba671aa7e4de"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=UPQdnUp2GRw:RCWeaUhggdU:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=UPQdnUp2GRw:RCWeaUhggdU:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=UPQdnUp2GRw:RCWeaUhggdU:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=UPQdnUp2GRw:RCWeaUhggdU:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=UPQdnUp2GRw:RCWeaUhggdU:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=UPQdnUp2GRw:RCWeaUhggdU:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/UPQdnUp2GRw" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+Here’s a quick quiz. Which of these tasks is harder to accomplish:
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+Getting $6,000 from a variety of groups within Microsoft to pay for a Gold &lt;a href="http://us.pycon.org/2009/"&gt;PyCon
+2009&lt;/a&gt; sponsorship.&lt;/li&gt;
+&lt;li&gt;
+Sending &lt;a href="http://www.python.org/psf/"&gt;PSF&lt;/a&gt; a check&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;
+If you guessed #2, you’d be right. It’s amazing how difficult the seemly trivial task
+of “give those PSF folks money” turned out to be. But it’s done now, and you can see
+the MS logo there on the side of all the PyCon pages.
+&lt;/p&gt;
+&lt;p&gt;
+In addition to the sponsorship, there are some great looking IronPython sessions at
+PyCon. 
+&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;a href="http://www.voidspace.org.uk/python/weblog/index.shtml"&gt;Michael Foord&lt;/a&gt; and &lt;a href="http://www.tartley.com"&gt;Jonathan
+Hartley&lt;/a&gt; are running a &lt;a href="http://us.pycon.org/2009/tutorials/schedule/1AM3/"&gt;Developing
+with IronPython&lt;/a&gt; tutorial. Michael is also delivering a talk &lt;a href="http://us.pycon.org/2009/conference/schedule/event/P1/"&gt;Functional
+Testing of Desktop Applications&lt;/a&gt;.&lt;/li&gt;
+&lt;li&gt;
+Jim Hugunin is delivering an invited talk &lt;a href="http://us.pycon.org/2009/conference/schedule/event/P117/"&gt;IronPython:
+Directions, Data and Demos &lt;/a&gt;
+&lt;/li&gt;
+&lt;li&gt;
+Dino Viehland is sitting on the &lt;a href="http://us.pycon.org/2009/conference/schedule/event/21/"&gt;Python
+VMs panel&lt;/a&gt; and doing a talk &lt;a href="http://us.pycon.org/2009/conference/schedule/event/86/"&gt;IronPython
+Implementation&lt;/a&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;a href="http://www.codinggeekette.com/"&gt;Sarah Dutkiewicz&lt;/a&gt; (aka Coding Geekette)
+is doing a talk &lt;a href="http://us.pycon.org/2009/conference/schedule/event/P12/"&gt;Pumping
+Iron into Python: Intro to FePy &lt;/a&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=51071c10-46be-4ed0-bf4b-ba671aa7e4de" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=51071c10-46be-4ed0-bf4b-ba671aa7e4de</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,51071c10-46be-4ed0-bf4b-ba671aa7e4de.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,51071c10-46be-4ed0-bf4b-ba671aa7e4de.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=51071c10-46be-4ed0-bf4b-ba671aa7e4de</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/11/IronPython+At+PyCon.aspx</feedburner:origLink></item><item><title>devhawk_ipy</title><link>http://feedproxy.google.com/~r/Devhawk/~3/YOkBduSP0KM/devhawkipy.aspx</link><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Wed, 11 Mar 2009 15:44:24 PDT</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,ba63a23c-bc53-4a8c-a940-884fff35b91c.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+As I write various python modules (many of which get blogged about), I dump them into
+a special folder on my machine(s). In my powershell profile script, I set the <a href="http://www.ironpython.info/index.php/Using_the_Python_Standard_Library">IRONPYTHONPATH
+environment variable</a> so that these modules are available to the IPy interpreter
+(i.e. ipy.exe). To date, I’ve been pretty haphazard about this. But I decided to get
+a little more structured and put that folder under source control and make it available
+as “<a href="http://github.com/devhawk/devhawk_ipy/tree">devhawk_ipy</a>”.
+</p>
+        <p>
+So far, I’ve only got three scripts (plus an empty __init__.py) in devhawk_ipy. 
+</p>
+        <ul>
+          <li>
+codedom.py (from <a href="http://devhawk.net/2009/01/30/IronPython+And+CodeDOM+Dynamically+Compiling+C+Files.aspx">IronPython
+and CodeDOM: Dynamically Compiling C# Files</a>)</li>
+          <li>
+ipypulldom.py (from <a href="http://devhawk.net/2008/05/06/Stream+Processing+XML+In+IronPython.aspx">Stream
+Processing XML in IronPython</a>)</li>
+          <li>
+xml2py.py (from <a href="http://devhawk.net/2008/05/07/Deserializing+XML+With+IronPython.aspx">Deserializing
+XML with IronPython</a>)</li>
+        </ul>
+        <p>
+Eventually I’ll put my code for working with <a href="http://devhawk.net/2008/11/13/IronPython+And+WPF+Part+1+Introduction.aspx">WPF</a>, <a href="http://devhawk.net/2008/12/13/IronPython+And+LiveFX+Accessing+Profiles.aspx">LiveFX</a> and <a href="http://devhawk.net/2009/01/07/Nightly+Builds+Technical+Info.aspx">Azure</a> into
+this package, but I’m not happy with where they are yet. 
+</p>
+        <p>
+Like ipydbg, devhawk_ipy is up on <a href="http://github.com/">GitHub</a>. For those
+non-Git users, I’m will continue to these files up on <a href="http://cid-0d9bc809858885a4.skydrive.live.com/browse.aspx/DevHawk%20Content/IronPython%20Stuff">my
+SkyDrive</a>. I kind of see SkyDrive as a dumping ground for random content while
+devhawk_ipy is where stuff goes when it’s a little more polished. 
+</p>
+        <p>
+Like IronPython, devhawk_ipy is licensed under the <a href="http://www.microsoft.com/opensource/licenses.mspx#Ms-PL">MS-PL</a>.
+If you’re interested in contributing, feel free to fork and send me patches.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=ba63a23c-bc53-4a8c-a940-884fff35b91c"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=YOkBduSP0KM:18jCIkySD7E:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=YOkBduSP0KM:18jCIkySD7E:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=YOkBduSP0KM:18jCIkySD7E:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=YOkBduSP0KM:18jCIkySD7E:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=YOkBduSP0KM:18jCIkySD7E:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=YOkBduSP0KM:18jCIkySD7E:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/YOkBduSP0KM" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+As I write various python modules (many of which get blogged about), I dump them into
+a special folder on my machine(s). In my powershell profile script, I set the &lt;a href="http://www.ironpython.info/index.php/Using_the_Python_Standard_Library"&gt;IRONPYTHONPATH
+environment variable&lt;/a&gt; so that these modules are available to the IPy interpreter
+(i.e. ipy.exe). To date, I’ve been pretty haphazard about this. But I decided to get
+a little more structured and put that folder under source control and make it available
+as “&lt;a href="http://github.com/devhawk/devhawk_ipy/tree"&gt;devhawk_ipy&lt;/a&gt;”.
+&lt;/p&gt;
+&lt;p&gt;
+So far, I’ve only got three scripts (plus an empty __init__.py) in devhawk_ipy. 
+&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+codedom.py (from &lt;a href="http://devhawk.net/2009/01/30/IronPython+And+CodeDOM+Dynamically+Compiling+C+Files.aspx"&gt;IronPython
+and CodeDOM: Dynamically Compiling C# Files&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;
+ipypulldom.py (from &lt;a href="http://devhawk.net/2008/05/06/Stream+Processing+XML+In+IronPython.aspx"&gt;Stream
+Processing XML in IronPython&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;
+xml2py.py (from &lt;a href="http://devhawk.net/2008/05/07/Deserializing+XML+With+IronPython.aspx"&gt;Deserializing
+XML with IronPython&lt;/a&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;
+Eventually I’ll put my code for working with &lt;a href="http://devhawk.net/2008/11/13/IronPython+And+WPF+Part+1+Introduction.aspx"&gt;WPF&lt;/a&gt;, &lt;a href="http://devhawk.net/2008/12/13/IronPython+And+LiveFX+Accessing+Profiles.aspx"&gt;LiveFX&lt;/a&gt; and &lt;a href="http://devhawk.net/2009/01/07/Nightly+Builds+Technical+Info.aspx"&gt;Azure&lt;/a&gt; into
+this package, but I’m not happy with where they are yet. 
+&lt;/p&gt;
+&lt;p&gt;
+Like ipydbg, devhawk_ipy is up on &lt;a href="http://github.com/"&gt;GitHub&lt;/a&gt;. For those
+non-Git users, I’m will continue to these files up on &lt;a href="http://cid-0d9bc809858885a4.skydrive.live.com/browse.aspx/DevHawk%20Content/IronPython%20Stuff"&gt;my
+SkyDrive&lt;/a&gt;. I kind of see SkyDrive as a dumping ground for random content while
+devhawk_ipy is where stuff goes when it’s a little more polished. 
+&lt;/p&gt;
+&lt;p&gt;
+Like IronPython, devhawk_ipy is licensed under the &lt;a href="http://www.microsoft.com/opensource/licenses.mspx#Ms-PL"&gt;MS-PL&lt;/a&gt;.
+If you’re interested in contributing, feel free to fork and send me patches.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=ba63a23c-bc53-4a8c-a940-884fff35b91c" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=ba63a23c-bc53-4a8c-a940-884fff35b91c</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,ba63a23c-bc53-4a8c-a940-884fff35b91c.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,ba63a23c-bc53-4a8c-a940-884fff35b91c.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=ba63a23c-bc53-4a8c-a940-884fff35b91c</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/11/devhawkipy.aspx</feedburner:origLink></item><item><title>Writing an IronPython Debugger: Dynamic Stack Trace</title><link>http://feedproxy.google.com/~r/Devhawk/~3/criqpOW_7OM/Writing+An+IronPython+Debugger+Dynamic+Stack+Trace.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Mon, 09 Mar 2009 15:10:02 PDT</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,48c4a70d-e243-43e5-9709-85d2119c592b.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+Now that I can <a href="http://devhawk.net/2009/03/04/Writing+And+IronPython+Debugger+Adding+Interactivity.aspx">interact
+with my debugger</a>, it’s time to add a command. I decided to start with something
+simple – or at least something I thought would be simple - printing a stack trace. 
+</p>
+        <p>
+In the <a href="http://msdn.microsoft.com/en-us/library/ms404520.aspx">unmanaged debugger
+API</a>, threads have the concept of both <a href="http://msdn.microsoft.com/en-us/library/ms233401.aspx">stack
+chains</a> and <a href="http://msdn.microsoft.com/en-us/library/ms230151.aspx">stack
+frames</a>. A stack chain represents a segment of the physical stack. In a typical
+managed app, you’ll have at least two stack chains: the unmanaged stack chain and
+the managed stack chain. You can interate through the stack chains for a given thread
+via the Chains property. However, ipydbg is a managed only debugger, so I can ignore
+the unmanaged stack chain. Instead, I just retrieve the current (managed) chain via
+the thread’s ActiveChain property.
+</p>
+        <p>
+Within a managed stack chain, there is a collection of stack frames. This is the call
+stack that managed developers are typically used to working with. It turns out that
+printing a raw stack trace is very easy to do. Here was my first stab at it:
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">elif</span> k.Key
+== ConsoleKey.T: 
+<br>
+  <span style="color: blue">print</span> <span style="color: maroon">"\nManaged
+Stack Trace"</span><br>
+  <span style="color: blue">for</span> f <span style="color: blue">in</span> active_thread.ActiveChain.Frames: 
+<br>
+    offset, sp = get_location(f) 
+<br>
+    metadata_import = CorMetadataImport(f.Function.Module) 
+<br>
+    method_info = metadata_import.GetMethodInfo(f.FunctionToken) 
+<br>
+    <span style="color: blue">print</span> <span style="color: maroon">" 
+"</span>, \ 
+<br>
+      <span style="color: maroon">"%s::%s --"</span> %
+(method_info.DeclaringType.Name, method_info.Name), \ 
+<br>
+      sp <span style="color: blue">if</span> sp != <span style="color: blue">None</span> <span style="color: blue">else</span> <span style="color: maroon">"(offset
+%d)"</span> % offset 
+<br></div>
+        <p>
+This elif block is part of the input method I showed last time. It loops thru the
+frames in the Active Chain of the active thread and prints some data to the console.
+As I said, pretty easy. Of course, the devil is in the details. 
+</p>
+        <p>
+First detail I should call out is that active_thread variable. <a href="http://blogs.msdn.com/jmstall/archive/2006/03/21/attach_asyncbreak.aspx">As
+per Mike Stall</a>, “there is no notion of "active thread" in the underlying
+debug APIs. It's purely a construct in a debugger UI to make it easier for end-users.”
+My console based UI may be rudimentary, but it’s still a UI. Events like OnBreakpoint
+include the active thread as a event argument, so I stash that away in a variable
+so it’ll be available to the input loop.
+</p>
+        <p>
+Second detail is the call to get_location. When we <a href="http://github.com/devhawk/ipydbg/blob/112c3acdcf726c3ad89ce2def8258ecc2fb55513/ipydbg.py#L50">last
+saw get_location</a>, it was returning a formatted string. Since my last post, I’ve
+refactored the code so it returns the raw location data – a tuple of the raw IP offset
+and the associated sequence point, if available. I’ve also added a __str__ method
+to my sequence point object, so when I print it to the console, I get the filename
+and line nicely formatted.
+</p>
+        <p>
+Finally, there’s all CorMetadataImport code. In addition to wrapping the unmanaged
+debugger API, CorDebug also wraps the <a href="http://msdn.microsoft.com/en-us/library/ms404384.aspx">unmanaged
+metadata API</a>. This code lets me get <a href="http://msdn.microsoft.com/en-us/library/system.reflection.methodinfo.aspx">MethodInfo</a> compatible
+view of the function metadata for a given stack frame. I use it here to get the type
+and function name for each frame on the stack.
+</p>
+        <p>
+The end result looks something like this. Note, I’ve replaced “Microsoft.Scripting”
+with “MS.Scripting” to avoid word wrapping.
+</p>
+        <p>
+          <font face="consolas, Courier, monospace">OnBreakpoint Initialize Location: simpletest.py:1
+(offset: 84) 
+<br>
+» t 
+<br>
+Managed Stack Trace 
+<br>
+   S$2::Initialize simpletest.py:1 (offset: 84) 
+<br>
+   MS.Scripting.Runtime.OptimizedScriptCode::InvokeTarget (offset 72) 
+<br>
+   MS.Scripting.ScriptCode::Run (offset 0) 
+<br>
+   IronPython.Hosting.PythonCommandLine::RunFileWorker (offset 77) 
+<br>
+   IronPython.Hosting.PythonCommandLine::RunFile (offset 15) 
+<br>
+   MS.Scripting.Hosting.Shell.CommandLine::Run (offset 46) 
+<br>
+   IronPython.Hosting.PythonCommandLine::Run (offset 240) 
+<br>
+   MS.Scripting.Hosting.Shell.CommandLine::Run (offset 74) 
+<br>
+   MS.Scripting.Hosting.Shell.ConsoleHost::RunCommandLine (offset 158) 
+<br>
+   MS.Scripting.Hosting.Shell.ConsoleHost::ExecuteInternal (offset 32) 
+<br>
+   MS.Scripting.Hosting.Shell.ConsoleHost::Execute (offset 63) 
+<br>
+   MS.Scripting.Hosting.Shell.ConsoleHost::Run (offset 390) 
+<br>
+   PythonConsoleHost::Main -- (offset 125)</font>
+        </p>
+        <p>
+As we can see, we may be on the first line of the python script, but we’ve got a pretty
+deep stack trace already. Everything but the top-most frame are from the underlying
+IronPython implementation. Those extra frames obscure the stack frames I actually
+care about, so it would be nice to hide any stack frames from IronPython or the DLR.
+It’s easy enough to write a python generator function that filters out frames that
+from the DLR or IronPython namespaces. In order to get the type name, we need the
+method_info like we did above. I’ve factored that code into a separate function in
+order to avoid code duplication.
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">def</span> get_method_info_for_frame(frame) 
+<br>
+    <span style="color: blue">if</span> frame.FrameType != CorFrameType.ILFrame: 
+<br>
+      <span style="color: blue">return</span> <span style="color: blue">None</span><br>
+    metadata_import = CorMetadataImport(frame.Function.Module) 
+<br>
+    <span style="color: blue">return</span> metadata_import.GetMethodInfo(frame.FunctionToken) 
+<br>
+     
+<br><span style="color: blue">def</span> get_dynamic_frames(chain): 
+<br>
+  <span style="color: blue">for</span> f <span style="color: blue">in</span> chain.Frames: 
+<br>
+    method_info = get_method_info_for_frame(f) 
+<br>
+    <span style="color: blue">if</span> method_info == <span style="color: blue">None</span>: 
+<br>
+      <span style="color: blue">continue</span><br>
+    typename = method_info.DeclaringType.Name 
+<br>
+    <span style="color: blue">if</span> typename.startswith(<span style="color: maroon">"Microsoft.Scripting."</span>)
+\ 
+<br>
+      <span style="color: blue">or</span> typename.startswith(<span style="color: maroon">"IronPython."</span>)
+\ 
+<br>
+      <span style="color: blue">or</span> typename == <span style="color: maroon">"PythonConsoleHost"</span>: 
+<br>
+        <span style="color: blue">continue</span><br>
+    <span style="color: blue">yield</span> f
+</div>
+        <p>
+You’ll notice I’ve added a guard to get_method_info_for_frame in order to ensure that
+the frame argument is an IL Frame. There are <a href="http://github.com/devhawk/ipydbg/blob/dab527c9bb39e61cc4a464d840db8ee6a2aef753/CorDebug/CorDebug/Thread.cs#L272">three
+types of stack frames</a> in the debugger API: <a href="http://msdn.microsoft.com/en-us/library/ms232990.aspx">IL</a>,
+native and <a href="http://msdn.microsoft.com/en-us/library/ms232469.aspx">internal</a>.
+Most of the frames we’re dealing with are IL frames, but you do run into the occasional <a href="http://msdn.microsoft.com/en-us/library/system.reflection.emit.dynamicmethod.aspx">lightweight
+function</a> (i.e. <a href="http://msdn.microsoft.com/en-us/library/system.reflection.emit.dynamicmethod.aspx">DynamicMethod</a>)
+frame when debugging IronPython code. Typically, IronPython generates DynamicMethods
+for all python code except for a few cases related to .NET interop. However, you can’t
+debug DynamicMethods, so when you run with –D, we generate normal non-dynamic methods
+instead. However, even when running with –D, we still use DynamicMethods for call
+site dispatch. Since they’re an implementation detail, we want to filter those out
+in get_dynamic_frames too.
+</p>
+        <p>
+This gives us a much more manageable stack trace:
+</p>
+        <p>
+          <font face="Consolas, Courier, monospace">OnBreakpoint Initialize Location: simpletest.py:1
+(offset: 84) 
+<br>
+» t 
+<br>
+Stack Trace 
+<br>
+   S$2::Initialize -- simpletest.py:1 (offset: 84)</font>
+        </p>
+        <p>
+As usual, the <a href="http://github.com/devhawk/ipydbg/blob/c33cf75c4e9273a21ada00abe2403c392e4ca0a0/ipydbg.py">latest
+ipydbg source</a> is up on GitHub.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=48c4a70d-e243-43e5-9709-85d2119c592b"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=criqpOW_7OM:NmZJwq_F968:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=criqpOW_7OM:NmZJwq_F968:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=criqpOW_7OM:NmZJwq_F968:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=criqpOW_7OM:NmZJwq_F968:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=criqpOW_7OM:NmZJwq_F968:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=criqpOW_7OM:NmZJwq_F968:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/criqpOW_7OM" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+Now that I can &lt;a href="http://devhawk.net/2009/03/04/Writing+And+IronPython+Debugger+Adding+Interactivity.aspx"&gt;interact
+with my debugger&lt;/a&gt;, it’s time to add a command. I decided to start with something
+simple – or at least something I thought would be simple - printing a stack trace. 
+&lt;/p&gt;
+&lt;p&gt;
+In the &lt;a href="http://msdn.microsoft.com/en-us/library/ms404520.aspx"&gt;unmanaged debugger
+API&lt;/a&gt;, threads have the concept of both &lt;a href="http://msdn.microsoft.com/en-us/library/ms233401.aspx"&gt;stack
+chains&lt;/a&gt; and &lt;a href="http://msdn.microsoft.com/en-us/library/ms230151.aspx"&gt;stack
+frames&lt;/a&gt;. A stack chain represents a segment of the physical stack. In a typical
+managed app, you’ll have at least two stack chains: the unmanaged stack chain and
+the managed stack chain. You can interate through the stack chains for a given thread
+via the Chains property. However, ipydbg is a managed only debugger, so I can ignore
+the unmanaged stack chain. Instead, I just retrieve the current (managed) chain via
+the thread’s ActiveChain property.
+&lt;/p&gt;
+&lt;p&gt;
+Within a managed stack chain, there is a collection of stack frames. This is the call
+stack that managed developers are typically used to working with. It turns out that
+printing a raw stack trace is very easy to do. Here was my first stab at it:
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;elif&lt;/span&gt; k.Key
+== ConsoleKey.T: 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;\nManaged
+Stack Trace&amp;quot;&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;for&lt;/span&gt; f &lt;span style="color: blue"&gt;in&lt;/span&gt; active_thread.ActiveChain.Frames: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; offset, sp = get_location(f) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; metadata_import = CorMetadataImport(f.Function.Module) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; method_info = metadata_import.GetMethodInfo(f.FunctionToken) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;&amp;#160;
+&amp;quot;&lt;/span&gt;, \ 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: maroon"&gt;&amp;quot;%s::%s --&amp;quot;&lt;/span&gt; %
+(method_info.DeclaringType.Name, method_info.Name), \ 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; sp &lt;span style="color: blue"&gt;if&lt;/span&gt; sp != &lt;span style="color: blue"&gt;None&lt;/span&gt;&amp;#160;&lt;span style="color: blue"&gt;else&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;(offset
+%d)&amp;quot;&lt;/span&gt; % offset 
+&lt;br /&gt;
+&lt;/div&gt;
+&lt;p&gt;
+This elif block is part of the input method I showed last time. It loops thru the
+frames in the Active Chain of the active thread and prints some data to the console.
+As I said, pretty easy. Of course, the devil is in the details. 
+&lt;/p&gt;
+&lt;p&gt;
+First detail I should call out is that active_thread variable. &lt;a href="http://blogs.msdn.com/jmstall/archive/2006/03/21/attach_asyncbreak.aspx"&gt;As
+per Mike Stall&lt;/a&gt;, “there is no notion of &amp;quot;active thread&amp;quot; in the underlying
+debug APIs. It's purely a construct in a debugger UI to make it easier for end-users.”
+My console based UI may be rudimentary, but it’s still a UI. Events like OnBreakpoint
+include the active thread as a event argument, so I stash that away in a variable
+so it’ll be available to the input loop.
+&lt;/p&gt;
+&lt;p&gt;
+Second detail is the call to get_location. When we &lt;a href="http://github.com/devhawk/ipydbg/blob/112c3acdcf726c3ad89ce2def8258ecc2fb55513/ipydbg.py#L50"&gt;last
+saw get_location&lt;/a&gt;, it was returning a formatted string. Since my last post, I’ve
+refactored the code so it returns the raw location data – a tuple of the raw IP offset
+and the associated sequence point, if available. I’ve also added a __str__ method
+to my sequence point object, so when I print it to the console, I get the filename
+and line nicely formatted.
+&lt;/p&gt;
+&lt;p&gt;
+Finally, there’s all CorMetadataImport code. In addition to wrapping the unmanaged
+debugger API, CorDebug also wraps the &lt;a href="http://msdn.microsoft.com/en-us/library/ms404384.aspx"&gt;unmanaged
+metadata API&lt;/a&gt;. This code lets me get &lt;a href="http://msdn.microsoft.com/en-us/library/system.reflection.methodinfo.aspx"&gt;MethodInfo&lt;/a&gt; compatible
+view of the function metadata for a given stack frame. I use it here to get the type
+and function name for each frame on the stack.
+&lt;/p&gt;
+&lt;p&gt;
+The end result looks something like this. Note, I’ve replaced “Microsoft.Scripting”
+with “MS.Scripting” to avoid word wrapping.
+&lt;/p&gt;
+&lt;p&gt;
+&lt;font face="consolas, Courier, monospace"&gt;OnBreakpoint Initialize Location: simpletest.py:1
+(offset: 84) 
+&lt;br /&gt;
+» t 
+&lt;br /&gt;
+Managed Stack Trace 
+&lt;br /&gt;
+&amp;#160;&amp;#160; S$2::Initialize simpletest.py:1 (offset: 84) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.Runtime.OptimizedScriptCode::InvokeTarget (offset 72) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.ScriptCode::Run (offset 0) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; IronPython.Hosting.PythonCommandLine::RunFileWorker (offset 77) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; IronPython.Hosting.PythonCommandLine::RunFile (offset 15) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.Hosting.Shell.CommandLine::Run (offset 46) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; IronPython.Hosting.PythonCommandLine::Run (offset 240) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.Hosting.Shell.CommandLine::Run (offset 74) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.Hosting.Shell.ConsoleHost::RunCommandLine (offset 158) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.Hosting.Shell.ConsoleHost::ExecuteInternal (offset 32) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.Hosting.Shell.ConsoleHost::Execute (offset 63) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; MS.Scripting.Hosting.Shell.ConsoleHost::Run (offset 390) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; PythonConsoleHost::Main -- (offset 125)&lt;/font&gt;
+&lt;/p&gt;
+&lt;p&gt;
+As we can see, we may be on the first line of the python script, but we’ve got a pretty
+deep stack trace already. Everything but the top-most frame are from the underlying
+IronPython implementation. Those extra frames obscure the stack frames I actually
+care about, so it would be nice to hide any stack frames from IronPython or the DLR.
+It’s easy enough to write a python generator function that filters out frames that
+from the DLR or IronPython namespaces. In order to get the type name, we need the
+method_info like we did above. I’ve factored that code into a separate function in
+order to avoid code duplication.
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;def&lt;/span&gt; get_method_info_for_frame(frame) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; frame.FrameType != CorFrameType.ILFrame: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt;&amp;#160;&lt;span style="color: blue"&gt;None&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; metadata_import = CorMetadataImport(frame.Function.Module) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; metadata_import.GetMethodInfo(frame.FunctionToken) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; get_dynamic_frames(chain): 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;for&lt;/span&gt; f &lt;span style="color: blue"&gt;in&lt;/span&gt; chain.Frames: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; method_info = get_method_info_for_frame(f) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; method_info == &lt;span style="color: blue"&gt;None&lt;/span&gt;: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;continue&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; typename = method_info.DeclaringType.Name 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; typename.startswith(&lt;span style="color: maroon"&gt;&amp;quot;Microsoft.Scripting.&amp;quot;&lt;/span&gt;)
+\ 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;or&lt;/span&gt; typename.startswith(&lt;span style="color: maroon"&gt;&amp;quot;IronPython.&amp;quot;&lt;/span&gt;)
+\ 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;or&lt;/span&gt; typename == &lt;span style="color: maroon"&gt;&amp;quot;PythonConsoleHost&amp;quot;&lt;/span&gt;: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;continue&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;yield&lt;/span&gt; f
+&lt;/div&gt;
+&lt;p&gt;
+You’ll notice I’ve added a guard to get_method_info_for_frame in order to ensure that
+the frame argument is an IL Frame. There are &lt;a href="http://github.com/devhawk/ipydbg/blob/dab527c9bb39e61cc4a464d840db8ee6a2aef753/CorDebug/CorDebug/Thread.cs#L272"&gt;three
+types of stack frames&lt;/a&gt; in the debugger API: &lt;a href="http://msdn.microsoft.com/en-us/library/ms232990.aspx"&gt;IL&lt;/a&gt;,
+native and &lt;a href="http://msdn.microsoft.com/en-us/library/ms232469.aspx"&gt;internal&lt;/a&gt;.
+Most of the frames we’re dealing with are IL frames, but you do run into the occasional &lt;a href="http://msdn.microsoft.com/en-us/library/system.reflection.emit.dynamicmethod.aspx"&gt;lightweight
+function&lt;/a&gt; (i.e. &lt;a href="http://msdn.microsoft.com/en-us/library/system.reflection.emit.dynamicmethod.aspx"&gt;DynamicMethod&lt;/a&gt;)
+frame when debugging IronPython code. Typically, IronPython generates DynamicMethods
+for all python code except for a few cases related to .NET interop. However, you can’t
+debug DynamicMethods, so when you run with –D, we generate normal non-dynamic methods
+instead. However, even when running with –D, we still use DynamicMethods for call
+site dispatch. Since they’re an implementation detail, we want to filter those out
+in get_dynamic_frames too.
+&lt;/p&gt;
+&lt;p&gt;
+This gives us a much more manageable stack trace:
+&lt;/p&gt;
+&lt;p&gt;
+&lt;font face="Consolas, Courier, monospace"&gt;OnBreakpoint Initialize Location: simpletest.py:1
+(offset: 84) 
+&lt;br /&gt;
+» t 
+&lt;br /&gt;
+Stack Trace 
+&lt;br /&gt;
+&amp;#160;&amp;#160; S$2::Initialize -- simpletest.py:1 (offset: 84)&lt;/font&gt;
+&lt;/p&gt;
+&lt;p&gt;
+As usual, the &lt;a href="http://github.com/devhawk/ipydbg/blob/c33cf75c4e9273a21ada00abe2403c392e4ca0a0/ipydbg.py"&gt;latest
+ipydbg source&lt;/a&gt; is up on GitHub.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=48c4a70d-e243-43e5-9709-85d2119c592b" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=48c4a70d-e243-43e5-9709-85d2119c592b</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,48c4a70d-e243-43e5-9709-85d2119c592b.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,48c4a70d-e243-43e5-9709-85d2119c592b.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=48c4a70d-e243-43e5-9709-85d2119c592b</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/09/Writing+An+IronPython+Debugger+Dynamic+Stack+Trace.aspx</feedburner:origLink></item><item><title>Writing and IronPython Debugger: Adding Interactivity</title><link>http://feedproxy.google.com/~r/Devhawk/~3/ukiY_S5dRak/Writing+And+IronPython+Debugger+Adding+Interactivity.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Wed, 04 Mar 2009 14:06:27 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,69b55d54-3aed-4ec4-bb36-09eb7e9ec02d.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+Now that ipydbg can <a href="http://devhawk.net/2009/03/02/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx">set
+a breakpoint</a>, it’s time to add some interactivity to the app. MDbg supports <a href="http://msdn.microsoft.com/en-us/library/ms229861.aspx">dozens
+of commands</a> and currently ipydbg supports none. I’d love for ipydbg to support
+a wide range of commands like MDbg does, but for now let’s keep it simple and start
+with two: Continue and Quit. These aren’t very interesting as commands go, but that
+lets me focus this blog post on adding basic interactivity and future posts on specific
+commands. 
+</p>
+        <p>
+First off, we have to understand how the CorDebug managed API supports interactivity. <a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx">As
+we’ve seen</a>, callbacks into the debugger are surfaced as managed events. If we
+look at the <a href="http://github.com/devhawk/ipydbg/blob/5858695ff85ed4740ad06466d4f54394e7f00f9b/CorDebug/CorDebug/Debugger.cs#L524">base
+class</a> for all the debugger event arguments, we see that it exposes a <a href="http://github.com/devhawk/ipydbg/blob/5858695ff85ed4740ad06466d4f54394e7f00f9b/CorDebug/CorDebug/Debugger.cs#L561">Continue
+property</a>. If you want the debugger to automatically continue after the event handler
+finishes running, you set the Continue property to true (which is the default). If
+you want the debugger to stay paused while you provide the developer a chance to poke
+around, you set Continue to false. In that case, the debugger stays paused until call
+process.Continue explicitly.
+</p>
+        <p>
+Once we set the Continue property to false, we need a mechanism to signal the main
+thread of execution that it’s time to wake up and ask the user what they want to do
+next. Of course, that’s what <a href="http://msdn.microsoft.com/en-us/library/system.threading.waithandle.aspx">WaitHandle</a> and
+it’s descendents are for. In fact, <a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx">we’re
+already using</a> an AutoResetEvent in OnProcessExit to signal that the debugged app
+has exited so we should exit the debugger. However, now we have two different signals
+that we want to send: exit the debugger or enter the input loop. I decided to differentiate
+by using two separate AutoResetEvents:
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">terminate_event
+= AutoResetEvent(<span style="color: maroon">False</span>)  
+<br>
+break_event = AutoResetEvent(<span style="color: maroon">False</span>)  
+<br><br><span style="color: blue">def</span> OnProcessExit(s,e):  
+<br>
+  <span style="color: blue">print</span> <span style="color: maroon">"OnProcessExit"</span>  
+<br>
+  terminate_event.Set()  
+<br><br><span style="color: blue">def</span> OnBreakpoint(s,e):  
+<br>
+  <span style="color: blue">print</span> <span style="color: maroon">"OnBreakpoint"</span>,
+get_location(  
+<br>
+    symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)  
+<br>
+  e.Continue = <span style="color: maroon">False</span>  
+<br>
+  break_event.Set()  
+<br><br><span style="color: green">#code to create debugger and process omitted for clarity</span><br><br>
+handles = Array.CreateInstance(WaitHandle, <span style="color: maroon">2</span>)  
+<br>
+handles[<span style="color: maroon">0</span>] = terminate_event  
+<br>
+handles[<span style="color: maroon">1</span>] = break_event  
+<br><br><span style="color: blue">while</span> <span style="color: maroon">True</span>:  
+<br>
+  process.Continue(<span style="color: maroon">False</span>)  
+<br><br>
+  i = WaitHandle.WaitAny(handles)  
+<br>
+  <span style="color: blue">if</span> i == <span style="color: maroon">0</span>:  
+<br>
+    <span style="color: blue">break</span>  
+<br><br>
+  input()
+</div>
+        <p>
+Instead of a single call to process.Continue I had before, I’ve created an infinite
+“while True” loop that calls Continue, waits for one of the events to signal, then
+either exits the loop of enters the input loop (via the input function). Since there
+are two AutoResetEvents, I need to use the <a href="http://msdn.microsoft.com/en-us/library/tdykks7z.aspx">WaitAny
+method</a> to wait for one of them to signal. WaitAny takes an array, which is kind
+of clunky to use from IronPython since the array has to be strongly typed. It would
+be much more pythonic if I could call WaitHandle.WaitAny([terminate_event, break_event]).
+WaitAny then returns an index into the array indicating which one received the signal.
+If it was the terminate_event that signaled, I exit the loop (and the application).
+Otherwise, I enter the input loop. Notice, by the way, in OnBreakpoint that I’m both
+setting Continue to false and signaling the break_event. 
+</p>
+        <p>
+The “input loop” needs to be a loop because the user may want to type in multiple
+commands before letting the debugged app continue to execute. This means that the
+input function is implemented as another “while True” loop. When the user does chooses
+a command that implies the process should continue, I simply exit out of the input
+function and the outer “while True” loop above executes the continue and waits for
+a signal. 
+</p>
+        <p>
+Here’s what the input function looks like right now with our two basic commands:
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">def</span> input(): 
+<br>
+  <span style="color: blue">while</span> <span style="color: maroon">True</span>: 
+<br>
+    Console.Write(<span style="color: maroon">"» "</span>) 
+<br>
+    k = Console.ReadKey() 
+<br>
+     
+<br>
+    <span style="color: blue">if</span> k.Key == ConsoleKey.Spacebar: 
+<br>
+      Console.WriteLine(<span style="color: maroon">"\nContinuing"</span>) 
+<br>
+      <span style="color: blue">return</span>  
+<br>
+    <span style="color: blue">elif</span> k.Key == ConsoleKey.Q: 
+<br>
+      Console.WriteLine(<span style="color: maroon">"\nQuitting"</span>) 
+<br>
+      process.Stop(<span style="color: maroon">0</span>) 
+<br>
+      process.Terminate(<span style="color: maroon">255</span>) 
+<br>
+      <span style="color: blue">return</span><br>
+    <span style="color: blue">else</span>: 
+<br>
+      Console.WriteLine(<span style="color: maroon">"\n
+Please enter a valid command"</span>)
+</div>
+        <p>
+I’ve mapped “q” to quit the debugger and spacebar to continue. Since I’m using Console
+ReadKey, you only have to type the key in question – no return needed. For continue,
+we don’t do anything but exit the input loop by returning. Continue gets called as
+part of the other loop and since we haven’t/can’t add additional breakpoints the debugged
+app will run until it ends. For quit, I call the <a href="http://msdn.microsoft.com/en-us/library/ms230796.aspx">Terminate
+method</a> on process, hard coding the return value to 255. However, Terminate implicitly
+continues the debugged process. Since you can’t continue a running process, the call
+to Continue in the outer loop throws an exception. I avoid this exception by adding
+the call to Stop before Terminate. As per the <a href="http://msdn.microsoft.com/en-us/library/ms232533.aspx">Stop
+docs</a>, the debugger maintains a “stop counter” and only resumes the debugged process
+when the counter reaches zero.  Calling Stop increases the stop counter by one,
+calling Terminate decreases it by one, then the outer loop Continue  call decreases
+it to zero and the process continues, terminates and fires the OnProcessExit event
+handler as usual.
+</p>
+        <p>
+Now that we have a basic interactive loop, I’ll be able to add more interesting commands.
+I’m guessing at some point, I’ll need to refactor input a bit – I’m guessing a huge
+if/elif/else statement is going to get ugly fast, but I’ll worry about that when it
+gets out of hand. As usual, the <a href="http://github.com/devhawk/ipydbg/tree/112c3acdcf726c3ad89ce2def8258ecc2fb55513">latest
+ipydbg source</a> is up on GitHub.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=69b55d54-3aed-4ec4-bb36-09eb7e9ec02d"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=ukiY_S5dRak:JsozXb0gqvo:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=ukiY_S5dRak:JsozXb0gqvo:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=ukiY_S5dRak:JsozXb0gqvo:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=ukiY_S5dRak:JsozXb0gqvo:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=ukiY_S5dRak:JsozXb0gqvo:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=ukiY_S5dRak:JsozXb0gqvo:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/ukiY_S5dRak" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+Now that ipydbg can &lt;a href="http://devhawk.net/2009/03/02/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx"&gt;set
+a breakpoint&lt;/a&gt;, it’s time to add some interactivity to the app. MDbg supports &lt;a href="http://msdn.microsoft.com/en-us/library/ms229861.aspx"&gt;dozens
+of commands&lt;/a&gt; and currently ipydbg supports none. I’d love for ipydbg to support
+a wide range of commands like MDbg does, but for now let’s keep it simple and start
+with two: Continue and Quit. These aren’t very interesting as commands go, but that
+lets me focus this blog post on adding basic interactivity and future posts on specific
+commands. 
+&lt;/p&gt;
+&lt;p&gt;
+First off, we have to understand how the CorDebug managed API supports interactivity. &lt;a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx"&gt;As
+we’ve seen&lt;/a&gt;, callbacks into the debugger are surfaced as managed events. If we
+look at the &lt;a href="http://github.com/devhawk/ipydbg/blob/5858695ff85ed4740ad06466d4f54394e7f00f9b/CorDebug/CorDebug/Debugger.cs#L524"&gt;base
+class&lt;/a&gt; for all the debugger event arguments, we see that it exposes a &lt;a href="http://github.com/devhawk/ipydbg/blob/5858695ff85ed4740ad06466d4f54394e7f00f9b/CorDebug/CorDebug/Debugger.cs#L561"&gt;Continue
+property&lt;/a&gt;. If you want the debugger to automatically continue after the event handler
+finishes running, you set the Continue property to true (which is the default). If
+you want the debugger to stay paused while you provide the developer a chance to poke
+around, you set Continue to false. In that case, the debugger stays paused until call
+process.Continue explicitly.
+&lt;/p&gt;
+&lt;p&gt;
+Once we set the Continue property to false, we need a mechanism to signal the main
+thread of execution that it’s time to wake up and ask the user what they want to do
+next. Of course, that’s what &lt;a href="http://msdn.microsoft.com/en-us/library/system.threading.waithandle.aspx"&gt;WaitHandle&lt;/a&gt; and
+it’s descendents are for. In fact, &lt;a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx"&gt;we’re
+already using&lt;/a&gt; an AutoResetEvent in OnProcessExit to signal that the debugged app
+has exited so we should exit the debugger. However, now we have two different signals
+that we want to send: exit the debugger or enter the input loop. I decided to differentiate
+by using two separate AutoResetEvents:
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;terminate_event
+= AutoResetEvent(&lt;span style="color: maroon"&gt;False&lt;/span&gt;)&amp;#160; 
+&lt;br /&gt;
+break_event = AutoResetEvent(&lt;span style="color: maroon"&gt;False&lt;/span&gt;)&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; OnProcessExit(s,e):&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;OnProcessExit&amp;quot;&lt;/span&gt;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; terminate_event.Set()&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; OnBreakpoint(s,e):&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;OnBreakpoint&amp;quot;&lt;/span&gt;,
+get_location(&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread)&amp;#160; 
+&lt;br /&gt;
+&amp;#160; e.Continue = &lt;span style="color: maroon"&gt;False&lt;/span&gt;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; break_event.Set()&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: green"&gt;#code to create debugger and process omitted for clarity&lt;/span&gt; 
+&lt;br /&gt;
+&lt;br /&gt;
+handles = Array.CreateInstance(WaitHandle, &lt;span style="color: maroon"&gt;2&lt;/span&gt;)&amp;#160; 
+&lt;br /&gt;
+handles[&lt;span style="color: maroon"&gt;0&lt;/span&gt;] = terminate_event&amp;#160; 
+&lt;br /&gt;
+handles[&lt;span style="color: maroon"&gt;1&lt;/span&gt;] = break_event&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;while&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;True&lt;/span&gt;:&amp;#160; 
+&lt;br /&gt;
+&amp;#160; process.Continue(&lt;span style="color: maroon"&gt;False&lt;/span&gt;)&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&amp;#160; i = WaitHandle.WaitAny(handles)&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; i == &lt;span style="color: maroon"&gt;0&lt;/span&gt;:&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;break&lt;/span&gt;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&amp;#160; input()
+&lt;/div&gt;
+&lt;p&gt;
+Instead of a single call to process.Continue I had before, I’ve created an infinite
+“while True” loop that calls Continue, waits for one of the events to signal, then
+either exits the loop of enters the input loop (via the input function). Since there
+are two AutoResetEvents, I need to use the &lt;a href="http://msdn.microsoft.com/en-us/library/tdykks7z.aspx"&gt;WaitAny
+method&lt;/a&gt; to wait for one of them to signal. WaitAny takes an array, which is kind
+of clunky to use from IronPython since the array has to be strongly typed. It would
+be much more pythonic if I could call WaitHandle.WaitAny([terminate_event, break_event]).
+WaitAny then returns an index into the array indicating which one received the signal.
+If it was the terminate_event that signaled, I exit the loop (and the application).
+Otherwise, I enter the input loop. Notice, by the way, in OnBreakpoint that I’m both
+setting Continue to false and signaling the break_event. 
+&lt;/p&gt;
+&lt;p&gt;
+The “input loop” needs to be a loop because the user may want to type in multiple
+commands before letting the debugged app continue to execute. This means that the
+input function is implemented as another “while True” loop. When the user does chooses
+a command that implies the process should continue, I simply exit out of the input
+function and the outer “while True” loop above executes the continue and waits for
+a signal. 
+&lt;/p&gt;
+&lt;p&gt;
+Here’s what the input function looks like right now with our two basic commands:
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;def&lt;/span&gt; input(): 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;while&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;True&lt;/span&gt;: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; Console.Write(&lt;span style="color: maroon"&gt;&amp;quot;» &amp;quot;&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; k = Console.ReadKey() 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; k.Key == ConsoleKey.Spacebar: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; Console.WriteLine(&lt;span style="color: maroon"&gt;&amp;quot;\nContinuing&amp;quot;&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;elif&lt;/span&gt; k.Key == ConsoleKey.Q: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; Console.WriteLine(&lt;span style="color: maroon"&gt;&amp;quot;\nQuitting&amp;quot;&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; process.Stop(&lt;span style="color: maroon"&gt;0&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; process.Terminate(&lt;span style="color: maroon"&gt;255&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;else&lt;/span&gt;: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; Console.WriteLine(&lt;span style="color: maroon"&gt;&amp;quot;\n
+Please enter a valid command&amp;quot;&lt;/span&gt;)
+&lt;/div&gt;
+&lt;p&gt;
+I’ve mapped “q” to quit the debugger and spacebar to continue. Since I’m using Console
+ReadKey, you only have to type the key in question – no return needed. For continue,
+we don’t do anything but exit the input loop by returning. Continue gets called as
+part of the other loop and since we haven’t/can’t add additional breakpoints the debugged
+app will run until it ends. For quit, I call the &lt;a href="http://msdn.microsoft.com/en-us/library/ms230796.aspx"&gt;Terminate
+method&lt;/a&gt; on process, hard coding the return value to 255. However, Terminate implicitly
+continues the debugged process. Since you can’t continue a running process, the call
+to Continue in the outer loop throws an exception. I avoid this exception by adding
+the call to Stop before Terminate. As per the &lt;a href="http://msdn.microsoft.com/en-us/library/ms232533.aspx"&gt;Stop
+docs&lt;/a&gt;, the debugger maintains a “stop counter” and only resumes the debugged process
+when the counter reaches zero.&amp;#160; Calling Stop increases the stop counter by one,
+calling Terminate decreases it by one, then the outer loop Continue&amp;#160; call decreases
+it to zero and the process continues, terminates and fires the OnProcessExit event
+handler as usual.
+&lt;/p&gt;
+&lt;p&gt;
+Now that we have a basic interactive loop, I’ll be able to add more interesting commands.
+I’m guessing at some point, I’ll need to refactor input a bit – I’m guessing a huge
+if/elif/else statement is going to get ugly fast, but I’ll worry about that when it
+gets out of hand. As usual, the &lt;a href="http://github.com/devhawk/ipydbg/tree/112c3acdcf726c3ad89ce2def8258ecc2fb55513"&gt;latest
+ipydbg source&lt;/a&gt; is up on GitHub.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=69b55d54-3aed-4ec4-bb36-09eb7e9ec02d" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=69b55d54-3aed-4ec4-bb36-09eb7e9ec02d</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,69b55d54-3aed-4ec4-bb36-09eb7e9ec02d.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,69b55d54-3aed-4ec4-bb36-09eb7e9ec02d.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=69b55d54-3aed-4ec4-bb36-09eb7e9ec02d</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/04/Writing+And+IronPython+Debugger+Adding+Interactivity.aspx</feedburner:origLink></item><item><title>Writing an IronPython Debugger: Setting a Breakpoint</title><link>http://feedproxy.google.com/~r/Devhawk/~3/NZFeiK4bnXs/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Mon, 02 Mar 2009 15:59:04 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,08c13b80-ad18-43f8-955d-6fa5fd5d9714.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+Now that we have a debugger process <a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx">up
+and running</a>, let start adding some actual features. First up, we want to be able
+to set breakpoints. One of the nice things MDbg does is auto-set a breakpoint on the
+entrypoint function. For ipydbg, we’re going to auto-set a breakpoint on the first
+line of the python file being debugged.
+</p>
+        <p>
+In order to set a breakpoint, we need debugger symbols. They allow us to translate
+between “line one of simpletest.py” and the actual location in the code and back.
+We’re all used to seeing the PDB files that are produced when we compile a C# assembly.
+Unsurprisingly, the <a href="http://msdn.microsoft.com/en-us/library/ms232451.aspx">symbol
+store binder</a> provides a method to <a href="http://msdn.microsoft.com/en-us/library/ms230866.aspx">load
+these PDB files from disk</a>. But where do IronPython debug symbols come from? I
+know from my extensive reading of the ipy.exe command line parameters that you pass
+–D to enable application debugging, but since all the IL is being generated in memory,
+how does the debugger get access to the PDB files?
+</p>
+        <p>
+It turns out the debugger API includes a <a href="http://msdn.microsoft.com/en-us/library/ms230148.aspx">UpdateModuleSymbols
+callback method</a> that the runtime uses to notify the debugger when the symbols
+change. The debugger symbols are provided in an IStream, and then you <a href="http://msdn.microsoft.com/en-us/library/ms232101.aspx">use
+the symbol binder</a> to get a <a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.symbolstore.isymbolreader.aspx">symbol
+reader</a>. The .NET Framework already provides a <a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.symbolstore.aspx">managed
+API</a> for reading and writing debug symbols. However, that API doesn’t support loading
+symbols from a stream, so the MDbg code includes it’s own <a href="http://github.com/devhawk/ipydbg/blob/5858695ff85ed4740ad06466d4f54394e7f00f9b/CorDebug/CorSymbolStore/symbinder.cs">wrapper</a> around
+the symbol binder API to include that functionality. Here’s some code to get the debug
+symbol reader for an updated module and iterate through the associated files:
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">sym_binder
+= SymbolBinder()   
+<br>
+     
+<br><span style="color: blue">def</span> OnUpdateModuleSymbols(s,e):   
+<br>
+  <span style="color: blue">print</span> <span style="color: maroon">"OnUpdateModuleSymbols"</span>   
+<br>
+     
+<br>
+  metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()   
+<br>
+  reader = sym_binder.GetReaderFromStream(metadata_import, e.Stream)   
+<br><br>
+  <span style="color: blue">for</span> doc <span style="color: blue">in</span> reader.GetDocuments():    
+<br>
+    <span style="color: blue">print</span> <span style="color: maroon">"\t"</span>,
+doc.URL 
+<br><br>
+process.OnUpdateModuleSymbols += OnUpdateModuleSymbols
+</div>
+        <p>
+If we run <a href="http://github.com/devhawk/ipydbg/blob/965e2fbf4834177cb7aa7816dd5d0d729672dec6/ipydbg.py">this
+version of ipydbg</a> on simpletest.py with the <a href="http://ironpython.codeplex.com/Release/ProjectReleases.aspx?ReleaseId=12481">IPy
+2.0.1 release</a> and the Python standard library installed, OnUpdatedModuleSymbols
+gets called six times, once for each python file that gets loaded when simpletest
+runs. (site.py, os.py, ntpath.py, stat.py, UserDict.py and simpletest.py). BTW, I
+tried running this code on the <a href="http://nbs.blob.core.windows.net/ironpython/IronPython.47624.release.zip">latest
+build of IPy</a> (<a href="http://www.codeplex.com/IronPython/SourceControl/changeset/view/47624">changeset
+47624</a>) and I’m getting a COM Interop exception. So for now, stick with 2.0.1.
+</p>
+        <p>
+Now that we can get these dynamically generated debug symbols, we can use them to
+create a breakpoint on the first line of the script being debugged. Everytime OnUpdateModuleSympols
+is called, I try to bind the initial breakpoint (unless it’s already been bound of
+course) by calling the following create_breakpoint function.
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">def</span> create_breakpoint(doc,
+line, module, reader): 
+<br>
+  line = doc.FindClosestLine(line) 
+<br>
+  method = reader.GetMethodFromDocumentPosition(doc, line, <span style="color: maroon">0</span>) 
+<br>
+  function = module.GetFunctionFromToken(method.Token.GetToken()) 
+<br>
+   
+<br>
+  <span style="color: blue">for</span> sp <span style="color: blue">in</span> get_sequence_points(method): 
+<br>
+    <span style="color: blue">if</span> sp.doc.URL == doc.URL <span style="color: blue">and</span> sp.start_line
+== line: 
+<br>
+      bp = function.ILCode.CreateBreakpoint(sp.offset) 
+<br>
+      bp.Activate(<span style="color: maroon">True</span>) 
+<br>
+      <span style="color: blue">return</span> bp 
+<br>
+       
+<br>
+  bp = function.CreateBreakpoint() 
+<br>
+  bp.Activate(<span style="color: maroon">True</span>) 
+<br>
+  <span style="color: blue">return</span> bp
+</div>
+        <p>
+This code translates a given document/line into a function/offset where we can set
+a breakpoint. To do this, we use sequence points which <a href="http://blogs.msdn.com/rmbyers/archive/2005/09/08/debuggingmodes-ignoresymbolstoresequencepoints.aspx">as
+per Rick Byers</a> are “used to mark a spot in the IL code that corresponds to a specific
+location in the original source”. So once we find the function that corresponds to
+a given line of code, we iterate over the sequence points until we find the one that
+matches the line we want to break on. If we find a matching sequence point, we set
+the breakpoint there. If we don’t, we set the breakpoint on the function itself. get_sequence_points
+is a simple wrapper around <a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.symbolstore.isymbolmethod.getsequencepoints.aspx">ISymbolMethod
+GetSequencePoints</a>. The original API is pretty ugly to use – managing six separate
+arrays of information – so get_sequence_points turns it into a generator function
+you can iterate over.
+</p>
+        <p>
+Now that the breakpoint is set, we want to trap the breakpoint event as well. That’s
+easy enough, we create an event handler for process.OnBreakpoint similar to the OnUpdateModuleSymbols
+event above. Eventually, we’ll have the ability to step when we break, but for now
+I’m just going to print out the current location when the breakpoint is hit. This
+is kind of the reverse of the operation above. Setting a breakpoint means going from
+a source location to an IL offset within a function. Printing the current location
+means going from an IL offset in a function back to the source location. Here’s the
+function to do that:
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">def</span> get_location(reader,
+thread):  
+<br>
+  frame = thread.ActiveFrame  
+<br>
+  function = frame.Function  
+<br>
+    
+<br>
+  offset, mapping_result = frame.GetIP()  
+<br>
+  method = reader.GetMethod(SymbolToken(frame.Function.Token))  
+<br>
+    
+<br>
+  real_sp = <span style="color: blue">None</span>  
+<br>
+  <span style="color: blue">for</span> sp <span style="color: blue">in</span> get_sequence_points(method):  
+<br>
+    <span style="color: blue">if</span> sp.offset &gt; offset:   
+<br>
+      <span style="color: blue">break</span>  
+<br>
+    <span style="color: blue">if</span> sp.start_line != <span style="color: maroon">0xfeefee</span>:   
+<br>
+      real_sp = sp  
+<br>
+        
+<br>
+  <span style="color: blue">if</span> real_sp == <span style="color: blue">None</span>:  
+<br>
+    <span style="color: blue">return</span> <span style="color: maroon">"Location
+(offset %d)"</span> % (offset)  
+<br>
+    
+<br>
+  <span style="color: blue">return</span> <span style="color: maroon">"Location
+%s:%d (offset %d)"</span> % (  
+<br>
+    Path.GetFileName(real_sp.doc.URL), real_sp.start_line, offset)  
+<br><br><span style="color: blue">def</span> OnBreakpoint(s,e): 
+<br>
+  <span style="color: blue">print</span> <span style="color: maroon">"OnBreakpoint"</span>,
+get_location( 
+<br>
+    symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread) 
+</div>
+        <p>
+        </p>
+        <p>
+Given a symbol reader and a debug thread, get_location returns a location string.
+It loops thru the sequence points, similar to create_breakpoint, in order to find
+the closest corresponding line of python code to the current offset (check out Mike
+Stall’s blog as for <a href="http://blogs.msdn.com/jmstall/archive/2005/06/19/FeeFee_SequencePoints.aspx">why
+I’m checking for 0xfeefee</a>). In order to make this work, I need the symbol reader
+for the module that I retrieved in OnUpdateModuleSymbols. For now, I’m stashing the
+reader in a global dictionary keyed by the module named symbol_readers where OnBreakpoint
+can access it. 
+</p>
+        <p>
+Ipydbg isn’t interactive yet, but it is now running, setting a breakpoint and successfully
+breaking at that breakpoint. As usual, the <a href="http://github.com/devhawk/ipydbg/commit/92521a59c3d6a4679a30bb019bda26a4eff8c894#diff-0">latest
+version of ipydbg</a> is up on GitHub.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=08c13b80-ad18-43f8-955d-6fa5fd5d9714"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=NZFeiK4bnXs:I8YZ-MPbuCE:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=NZFeiK4bnXs:I8YZ-MPbuCE:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=NZFeiK4bnXs:I8YZ-MPbuCE:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=NZFeiK4bnXs:I8YZ-MPbuCE:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=NZFeiK4bnXs:I8YZ-MPbuCE:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=NZFeiK4bnXs:I8YZ-MPbuCE:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/NZFeiK4bnXs" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+Now that we have a debugger process &lt;a href="http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx"&gt;up
+and running&lt;/a&gt;, let start adding some actual features. First up, we want to be able
+to set breakpoints. One of the nice things MDbg does is auto-set a breakpoint on the
+entrypoint function. For ipydbg, we’re going to auto-set a breakpoint on the first
+line of the python file being debugged.
+&lt;/p&gt;
+&lt;p&gt;
+In order to set a breakpoint, we need debugger symbols. They allow us to translate
+between “line one of simpletest.py” and the actual location in the code and back.
+We’re all used to seeing the PDB files that are produced when we compile a C# assembly.
+Unsurprisingly, the &lt;a href="http://msdn.microsoft.com/en-us/library/ms232451.aspx"&gt;symbol
+store binder&lt;/a&gt; provides a method to &lt;a href="http://msdn.microsoft.com/en-us/library/ms230866.aspx"&gt;load
+these PDB files from disk&lt;/a&gt;. But where do IronPython debug symbols come from? I
+know from my extensive reading of the ipy.exe command line parameters that you pass
+–D to enable application debugging, but since all the IL is being generated in memory,
+how does the debugger get access to the PDB files?
+&lt;/p&gt;
+&lt;p&gt;
+It turns out the debugger API includes a &lt;a href="http://msdn.microsoft.com/en-us/library/ms230148.aspx"&gt;UpdateModuleSymbols
+callback method&lt;/a&gt; that the runtime uses to notify the debugger when the symbols
+change. The debugger symbols are provided in an IStream, and then you &lt;a href="http://msdn.microsoft.com/en-us/library/ms232101.aspx"&gt;use
+the symbol binder&lt;/a&gt; to get a &lt;a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.symbolstore.isymbolreader.aspx"&gt;symbol
+reader&lt;/a&gt;. The .NET Framework already provides a &lt;a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.symbolstore.aspx"&gt;managed
+API&lt;/a&gt; for reading and writing debug symbols. However, that API doesn’t support loading
+symbols from a stream, so the MDbg code includes it’s own &lt;a href="http://github.com/devhawk/ipydbg/blob/5858695ff85ed4740ad06466d4f54394e7f00f9b/CorDebug/CorSymbolStore/symbinder.cs"&gt;wrapper&lt;/a&gt; around
+the symbol binder API to include that functionality. Here’s some code to get the debug
+symbol reader for an updated module and iterate through the associated files:
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;sym_binder
+= SymbolBinder()&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; OnUpdateModuleSymbols(s,e):&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;OnUpdateModuleSymbols&amp;quot;&lt;/span&gt;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; metadata_import = e.Module.GetMetaDataInterface[IMetadataImport]()&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; reader = sym_binder.GetReaderFromStream(metadata_import, e.Stream)&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;for&lt;/span&gt; doc &lt;span style="color: blue"&gt;in&lt;/span&gt; reader.GetDocuments():&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;\t&amp;quot;&lt;/span&gt;,
+doc.URL 
+&lt;br /&gt;
+&lt;br /&gt;
+process.OnUpdateModuleSymbols += OnUpdateModuleSymbols
+&lt;/div&gt;
+&lt;p&gt;
+If we run &lt;a href="http://github.com/devhawk/ipydbg/blob/965e2fbf4834177cb7aa7816dd5d0d729672dec6/ipydbg.py"&gt;this
+version of ipydbg&lt;/a&gt; on simpletest.py with the &lt;a href="http://ironpython.codeplex.com/Release/ProjectReleases.aspx?ReleaseId=12481"&gt;IPy
+2.0.1 release&lt;/a&gt; and the Python standard library installed, OnUpdatedModuleSymbols
+gets called six times, once for each python file that gets loaded when simpletest
+runs. (site.py, os.py, ntpath.py, stat.py, UserDict.py and simpletest.py). BTW, I
+tried running this code on the &lt;a href="http://nbs.blob.core.windows.net/ironpython/IronPython.47624.release.zip"&gt;latest
+build of IPy&lt;/a&gt; (&lt;a href="http://www.codeplex.com/IronPython/SourceControl/changeset/view/47624"&gt;changeset
+47624&lt;/a&gt;) and I’m getting a COM Interop exception. So for now, stick with 2.0.1.
+&lt;/p&gt;
+&lt;p&gt;
+Now that we can get these dynamically generated debug symbols, we can use them to
+create a breakpoint on the first line of the script being debugged. Everytime OnUpdateModuleSympols
+is called, I try to bind the initial breakpoint (unless it’s already been bound of
+course) by calling the following create_breakpoint function.
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;def&lt;/span&gt; create_breakpoint(doc,
+line, module, reader): 
+&lt;br /&gt;
+&amp;#160; line = doc.FindClosestLine(line) 
+&lt;br /&gt;
+&amp;#160; method = reader.GetMethodFromDocumentPosition(doc, line, &lt;span style="color: maroon"&gt;0&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160; function = module.GetFunctionFromToken(method.Token.GetToken()) 
+&lt;br /&gt;
+&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;for&lt;/span&gt; sp &lt;span style="color: blue"&gt;in&lt;/span&gt; get_sequence_points(method): 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; sp.doc.URL == doc.URL &lt;span style="color: blue"&gt;and&lt;/span&gt; sp.start_line
+== line: 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; bp = function.ILCode.CreateBreakpoint(sp.offset) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; bp.Activate(&lt;span style="color: maroon"&gt;True&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; bp 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; bp = function.CreateBreakpoint() 
+&lt;br /&gt;
+&amp;#160; bp.Activate(&lt;span style="color: maroon"&gt;True&lt;/span&gt;) 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt; bp
+&lt;/div&gt;
+&lt;p&gt;
+This code translates a given document/line into a function/offset where we can set
+a breakpoint. To do this, we use sequence points which &lt;a href="http://blogs.msdn.com/rmbyers/archive/2005/09/08/debuggingmodes-ignoresymbolstoresequencepoints.aspx"&gt;as
+per Rick Byers&lt;/a&gt; are “used to mark a spot in the IL code that corresponds to a specific
+location in the original source”. So once we find the function that corresponds to
+a given line of code, we iterate over the sequence points until we find the one that
+matches the line we want to break on. If we find a matching sequence point, we set
+the breakpoint there. If we don’t, we set the breakpoint on the function itself. get_sequence_points
+is a simple wrapper around &lt;a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.symbolstore.isymbolmethod.getsequencepoints.aspx"&gt;ISymbolMethod
+GetSequencePoints&lt;/a&gt;. The original API is pretty ugly to use – managing six separate
+arrays of information – so get_sequence_points turns it into a generator function
+you can iterate over.
+&lt;/p&gt;
+&lt;p&gt;
+Now that the breakpoint is set, we want to trap the breakpoint event as well. That’s
+easy enough, we create an event handler for process.OnBreakpoint similar to the OnUpdateModuleSymbols
+event above. Eventually, we’ll have the ability to step when we break, but for now
+I’m just going to print out the current location when the breakpoint is hit. This
+is kind of the reverse of the operation above. Setting a breakpoint means going from
+a source location to an IL offset within a function. Printing the current location
+means going from an IL offset in a function back to the source location. Here’s the
+function to do that:
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;def&lt;/span&gt; get_location(reader,
+thread):&amp;#160; 
+&lt;br /&gt;
+&amp;#160; frame = thread.ActiveFrame&amp;#160; 
+&lt;br /&gt;
+&amp;#160; function = frame.Function&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; offset, mapping_result = frame.GetIP()&amp;#160; 
+&lt;br /&gt;
+&amp;#160; method = reader.GetMethod(SymbolToken(frame.Function.Token))&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; real_sp = &lt;span style="color: blue"&gt;None&lt;/span&gt;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;for&lt;/span&gt; sp &lt;span style="color: blue"&gt;in&lt;/span&gt; get_sequence_points(method):&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; sp.offset &amp;gt; offset:&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;break&lt;/span&gt;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; sp.start_line != &lt;span style="color: maroon"&gt;0xfeefee&lt;/span&gt;:&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; real_sp = sp&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;if&lt;/span&gt; real_sp == &lt;span style="color: blue"&gt;None&lt;/span&gt;:&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;Location
+(offset %d)&amp;quot;&lt;/span&gt; % (offset)&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;return&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;Location
+%s:%d (offset %d)&amp;quot;&lt;/span&gt; % (&amp;#160; 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; Path.GetFileName(real_sp.doc.URL), real_sp.start_line, offset)&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; OnBreakpoint(s,e): 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;OnBreakpoint&amp;quot;&lt;/span&gt;,
+get_location( 
+&lt;br /&gt;
+&amp;#160;&amp;#160;&amp;#160; symbol_readers[e.Thread.ActiveFrame.Function.Module], e.Thread) 
+&lt;/div&gt;
+&lt;p&gt;
+&lt;/p&gt;
+&lt;p&gt;
+Given a symbol reader and a debug thread, get_location returns a location string.
+It loops thru the sequence points, similar to create_breakpoint, in order to find
+the closest corresponding line of python code to the current offset (check out Mike
+Stall’s blog as for &lt;a href="http://blogs.msdn.com/jmstall/archive/2005/06/19/FeeFee_SequencePoints.aspx"&gt;why
+I’m checking for 0xfeefee&lt;/a&gt;). In order to make this work, I need the symbol reader
+for the module that I retrieved in OnUpdateModuleSymbols. For now, I’m stashing the
+reader in a global dictionary keyed by the module named symbol_readers where OnBreakpoint
+can access it. 
+&lt;/p&gt;
+&lt;p&gt;
+Ipydbg isn’t interactive yet, but it is now running, setting a breakpoint and successfully
+breaking at that breakpoint. As usual, the &lt;a href="http://github.com/devhawk/ipydbg/commit/92521a59c3d6a4679a30bb019bda26a4eff8c894#diff-0"&gt;latest
+version of ipydbg&lt;/a&gt; is up on GitHub.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=08c13b80-ad18-43f8-955d-6fa5fd5d9714" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=08c13b80-ad18-43f8-955d-6fa5fd5d9714</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,08c13b80-ad18-43f8-955d-6fa5fd5d9714.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,08c13b80-ad18-43f8-955d-6fa5fd5d9714.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=08c13b80-ad18-43f8-955d-6fa5fd5d9714</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/03/02/Writing+An+IronPython+Debugger+Setting+A+Breakpoint.aspx</feedburner:origLink></item><item><title>Links for 2009-02-28 [del.icio.us]</title><link>http://feedproxy.google.com/~r/Devhawk/~3/iSxGO58xuEk/harrypierson</link><pubDate>Sun, 01 Mar 2009 00:00:00 PST</pubDate><guid isPermaLink="false">http://del.icio.us/harrypierson#2009-02-28</guid><description>&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://langexplr.blogspot.com/2009/02/writing-xml-with-ironpython-xmlwriter.html"&gt;Writing Xml with IronPython, XmlWriter and the 'with' statement&lt;/a&gt;&lt;br/&gt;
+Great post on using Python&amp;#039;s with statement to build XML files with a very clean syntax by Luis Diego Fallas from the Exploring Beautiful Languages blog&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://bespin.mozilla.com/"&gt;Mozilla Bespin&lt;/a&gt;&lt;br/&gt;
+Bespin is a Mozilla Labs experiment that proposes an open, extensible web-based framework for code editing that aims to increase developer productivity, enable compelling user experiences, and promote the use of open standards.&lt;/li&gt;
+&lt;/ul&gt;&lt;img src="http://feeds2.feedburner.com/~r/Devhawk/~4/iSxGO58xuEk" height="1" width="1"/&gt;</description><feedburner:origLink>http://del.icio.us/harrypierson#2009-02-28</feedburner:origLink></item><item><title>CodeHTMLer Language Definition for Python</title><link>http://feedproxy.google.com/~r/Devhawk/~3/m2R9Y4yIrWU/CodeHTMLer+Language+Definition+For+Python.aspx</link><category>IronPython</category><category>Python</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Sat, 28 Feb 2009 08:26:16 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,6f52146e-2967-4102-ac38-e992b2460da0.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+As I’ve blogged before, I use <a href="http://www.codeplex.com/CodeHtmler">CodeHTMLer</a> to
+post code snippets on my blog. I hear <a href="http://code.google.com/p/syntaxhighlighter/">SyntaxHighlighter</a> is
+the new hotness, but since it relies on CSS the syntax highlighting only appears on
+the website and not in the RSS reader. 
+</p>
+        <p>
+The problem with CodeHTMLer is that it only supports a handful of languages out of
+the box. But the language definition file is simple enough – just an XML file with
+a bunch of regular expressions. When I was doing a lot of F# work, I wrote an <a href="http://devhawk.net/2007/12/07/Blogging+F+Code.aspx">F#
+language definition</a>. Now that I’m on the IronPython team, go figure I’m writing
+a lot of code in Python. I *know* I’ve written a Python language definition for CodeHTMLer
+more than once, but I would forget to post it and then lose it when I paved my laptop
+hard drive. So after doing this three or four times, I’ve finally remembered to <a href="http://cid-0d9bc809858885a4.skydrive.live.com/self.aspx/DevHawk%20Content/Python%20CodeHTMLer.xml">put
+it up on my SkyDrive</a>.
+</p>
+        <p>
+If you want to install this yourself to colorize Python code snippets with CodeHTMLer,
+follow the directions I posted earlier with the <a href="http://devhawk.net/2007/12/07/Blogging+F+Code.aspx">F#
+language definition</a>.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=6f52146e-2967-4102-ac38-e992b2460da0"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=m2R9Y4yIrWU:7dchgxY9uaI:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=m2R9Y4yIrWU:7dchgxY9uaI:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=m2R9Y4yIrWU:7dchgxY9uaI:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=m2R9Y4yIrWU:7dchgxY9uaI:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=m2R9Y4yIrWU:7dchgxY9uaI:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=m2R9Y4yIrWU:7dchgxY9uaI:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/m2R9Y4yIrWU" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+As I’ve blogged before, I use &lt;a href="http://www.codeplex.com/CodeHtmler"&gt;CodeHTMLer&lt;/a&gt; to
+post code snippets on my blog. I hear &lt;a href="http://code.google.com/p/syntaxhighlighter/"&gt;SyntaxHighlighter&lt;/a&gt; is
+the new hotness, but since it relies on CSS the syntax highlighting only appears on
+the website and not in the RSS reader. 
+&lt;/p&gt;
+&lt;p&gt;
+The problem with CodeHTMLer is that it only supports a handful of languages out of
+the box. But the language definition file is simple enough – just an XML file with
+a bunch of regular expressions. When I was doing a lot of F# work, I wrote an &lt;a href="http://devhawk.net/2007/12/07/Blogging+F+Code.aspx"&gt;F#
+language definition&lt;/a&gt;. Now that I’m on the IronPython team, go figure I’m writing
+a lot of code in Python. I *know* I’ve written a Python language definition for CodeHTMLer
+more than once, but I would forget to post it and then lose it when I paved my laptop
+hard drive. So after doing this three or four times, I’ve finally remembered to &lt;a href="http://cid-0d9bc809858885a4.skydrive.live.com/self.aspx/DevHawk%20Content/Python%20CodeHTMLer.xml"&gt;put
+it up on my SkyDrive&lt;/a&gt;.
+&lt;/p&gt;
+&lt;p&gt;
+If you want to install this yourself to colorize Python code snippets with CodeHTMLer,
+follow the directions I posted earlier with the &lt;a href="http://devhawk.net/2007/12/07/Blogging+F+Code.aspx"&gt;F#
+language definition&lt;/a&gt;.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=6f52146e-2967-4102-ac38-e992b2460da0" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=6f52146e-2967-4102-ac38-e992b2460da0</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,6f52146e-2967-4102-ac38-e992b2460da0.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,6f52146e-2967-4102-ac38-e992b2460da0.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=6f52146e-2967-4102-ac38-e992b2460da0</wfw:commentRss><slash:comments xmlns:slash="http://purl.org/rss/1.0/modules/slash/">1</slash:comments><feedburner:origLink>http://devhawk.net/2009/02/28/CodeHTMLer+Language+Definition+For+Python.aspx</feedburner:origLink></item><item><title>Writing an IronPython Debugger: Hello, Debugger!</title><link>http://feedproxy.google.com/~r/Devhawk/~3/WR1sNaC-ba8/Writing+An+IronPython+Debugger+Hello+Debugger.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Fri, 27 Feb 2009 17:41:21 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,f7cea3aa-460b-4f8d-a76e-a24df4543e38.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+Since I’m guessing most of my readers have never build a debugger before (I certainly
+hadn’t), let’s start with the debugger equivalent of Hello, World!
+</p>
+        <div style="font-family: consolas, lucida console, courier, monospace">
+          <span style="color: blue">import</span> clr   
+<br>
+clr.AddReference('CorDebug')   
+<br><br><span style="color: blue">import</span> sys   
+<br><span style="color: blue">from</span> System.Reflection <span style="color: blue">import</span> Assembly   
+<br><span style="color: blue">from</span> System.Threading <span style="color: blue">import</span> AutoResetEvent   
+<br><span style="color: blue">from</span> Microsoft.Samples.Debugging.CorDebug <span style="color: blue">import</span> CorDebugger   
+<br><br>
+ipy = Assembly.GetEntryAssembly().Location   
+<br>
+py_file = sys.argv[<span style="color: maroon">1</span>]   
+<br>
+cmd_line = <span style="color: maroon">"\"%s\" -D \"%s\""</span> %
+(ipy, py_file)   
+<br><br>
+evt = AutoResetEvent(<span style="color: maroon">False</span>)   
+<br><br><span style="color: blue">def</span> OnCreateAppDomain(s,e):   
+<br>
+  <span style="color: blue">print</span> <span style="color: maroon">"OnCreateAppDomain"</span>,
+e.AppDomain.Name   
+<br>
+  e.AppDomain.Attach()   
+<br><br><span style="color: blue">def</span> OnProcessExit(s,e):   
+<br>
+  <span style="color: blue">print</span> <span style="color: maroon">"OnProcessExit"</span>   
+<br>
+  evt.Set()   
+<br><br>
+debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())   
+<br>
+process = debugger.CreateProcess(ipy, cmd_line)   
+<br><br>
+process.OnCreateAppDomain += OnCreateAppDomain   
+<br>
+process.OnProcessExit += OnProcessExit   
+<br><br>
+process.Continue(<span style="color: maroon">False</span>)   
+<br><br>
+evt.WaitOne() 
+</div>
+        <p>
+I start by adding a reference to the CorDebug library I discussed at the end of <a href="http://devhawk.net/2009/02/27/Writing+An+IronPython+Debugger+MDbg+101.aspx">my
+last post</a> (that’s the low level managed debugger API plus the C# definitions of
+the various COM APIs). Then I need both the path to the IPy executable as well as
+the script to be run, which is passed in on the command line (sys.argv). For now,
+I just use Reflection to find the path to the current ipy.exe and use that. I use
+those to build a command line – you’ll notice I’m adding the –D on the command line
+to generate debugger symbols. 
+</p>
+        <p>
+Next, I define two event handlers: OnCreateAppDomain and OnProcessExit. When the AppDomain
+is created, the debugger needs to explicitly attach to it. When the process exits,
+we signal an AutoResetEvent to indicate our program can exit. 
+</p>
+        <p>
+Then it’s a simple process of creating the CorDebugger object, creating a process,
+setting up the process event handlers and then running the process via the call to
+Continue. We then wait on the AutoResetEvent for the debugged process to exit. And
+voila, you have the worlds simplest debugger in about 30 lines of code.
+</p>
+        <p>
+To run it, you run the ipy.exe interpreter and pass in the ipydbg script above and
+the python script to be debugged. You also have to pass –X:MTA on the command line,
+as the ICorDebug objects only work from a multi-threaded apartment. When you run it,
+you get something that looks like this:
+</p>
+        <p>
+          <font face="Consolas, Lucida Console, Courier">» ipy -X:MTA ipydbg.py simpletest.py 
+<br>
+OnCreateAppDomain DefaultDomain 
+<br>
+35 
+<br>
+OnProcessExit</font>
+        </p>
+        <p>
+Simpletest.py is a very simple script that prints the results of adding two numbers
+together. Here, you see the event handlers fire by writing text out to the console. 
+</p>
+        <p>
+For those of you who’d like to see this code actually run on your machine, I’ve created
+an ipydbg project <a href="http://github.com/devhawk/ipydbg/tree/master">up on GitHub</a>.
+The tree version that goes with this blog post <a href="http://github.com/devhawk/ipydbg/tree/5858695ff85ed4740ad06466d4f54394e7f00f9b">is
+here</a>. If you’re not running <a href="http://git-scm.com/">Git</a>, you can download
+a tar or zip of the project via the “download” button at the top of the page. It includes
+both the CorDebug source as well as the ipydbg.py file (shown above) and the simpletest.py
+file. It also has a compiled version of CorDebug.dll, so you don’t have to compile
+it yourself (for those IPy only coders who don’t have VS on their machine).
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=f7cea3aa-460b-4f8d-a76e-a24df4543e38"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=WR1sNaC-ba8:aPf46JBU10w:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=WR1sNaC-ba8:aPf46JBU10w:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=WR1sNaC-ba8:aPf46JBU10w:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=WR1sNaC-ba8:aPf46JBU10w:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=WR1sNaC-ba8:aPf46JBU10w:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=WR1sNaC-ba8:aPf46JBU10w:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/WR1sNaC-ba8" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+Since I’m guessing most of my readers have never build a debugger before (I certainly
+hadn’t), let’s start with the debugger equivalent of Hello, World!
+&lt;/p&gt;
+&lt;div style="font-family: consolas, lucida console, courier, monospace"&gt;&lt;span style="color: blue"&gt;import&lt;/span&gt; clr&amp;#160;&amp;#160; 
+&lt;br /&gt;
+clr.AddReference('CorDebug')&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;import&lt;/span&gt; sys&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;from&lt;/span&gt; System.Reflection &lt;span style="color: blue"&gt;import&lt;/span&gt; Assembly&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;from&lt;/span&gt; System.Threading &lt;span style="color: blue"&gt;import&lt;/span&gt; AutoResetEvent&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;from&lt;/span&gt; Microsoft.Samples.Debugging.CorDebug &lt;span style="color: blue"&gt;import&lt;/span&gt; CorDebugger&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+ipy = Assembly.GetEntryAssembly().Location&amp;#160;&amp;#160; 
+&lt;br /&gt;
+py_file = sys.argv[&lt;span style="color: maroon"&gt;1&lt;/span&gt;]&amp;#160;&amp;#160; 
+&lt;br /&gt;
+cmd_line = &lt;span style="color: maroon"&gt;&amp;quot;\&amp;quot;%s\&amp;quot; -D \&amp;quot;%s\&amp;quot;&amp;quot;&lt;/span&gt; %
+(ipy, py_file)&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+evt = AutoResetEvent(&lt;span style="color: maroon"&gt;False&lt;/span&gt;)&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; OnCreateAppDomain(s,e):&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;OnCreateAppDomain&amp;quot;&lt;/span&gt;,
+e.AppDomain.Name&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; e.AppDomain.Attach()&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+&lt;span style="color: blue"&gt;def&lt;/span&gt; OnProcessExit(s,e):&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; &lt;span style="color: blue"&gt;print&lt;/span&gt;&amp;#160;&lt;span style="color: maroon"&gt;&amp;quot;OnProcessExit&amp;quot;&lt;/span&gt;&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&amp;#160; evt.Set()&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+debugger = CorDebugger(CorDebugger.GetDefaultDebuggerVersion())&amp;#160;&amp;#160; 
+&lt;br /&gt;
+process = debugger.CreateProcess(ipy, cmd_line)&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+process.OnCreateAppDomain += OnCreateAppDomain&amp;#160;&amp;#160; 
+&lt;br /&gt;
+process.OnProcessExit += OnProcessExit&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+process.Continue(&lt;span style="color: maroon"&gt;False&lt;/span&gt;)&amp;#160;&amp;#160; 
+&lt;br /&gt;
+&lt;br /&gt;
+evt.WaitOne() 
+&lt;/div&gt;
+&lt;p&gt;
+I start by adding a reference to the CorDebug library I discussed at the end of &lt;a href="http://devhawk.net/2009/02/27/Writing+An+IronPython+Debugger+MDbg+101.aspx"&gt;my
+last post&lt;/a&gt; (that’s the low level managed debugger API plus the C# definitions of
+the various COM APIs). Then I need both the path to the IPy executable as well as
+the script to be run, which is passed in on the command line (sys.argv). For now,
+I just use Reflection to find the path to the current ipy.exe and use that. I use
+those to build a command line – you’ll notice I’m adding the –D on the command line
+to generate debugger symbols. 
+&lt;/p&gt;
+&lt;p&gt;
+Next, I define two event handlers: OnCreateAppDomain and OnProcessExit. When the AppDomain
+is created, the debugger needs to explicitly attach to it. When the process exits,
+we signal an AutoResetEvent to indicate our program can exit. 
+&lt;/p&gt;
+&lt;p&gt;
+Then it’s a simple process of creating the CorDebugger object, creating a process,
+setting up the process event handlers and then running the process via the call to
+Continue. We then wait on the AutoResetEvent for the debugged process to exit. And
+voila, you have the worlds simplest debugger in about 30 lines of code.
+&lt;/p&gt;
+&lt;p&gt;
+To run it, you run the ipy.exe interpreter and pass in the ipydbg script above and
+the python script to be debugged. You also have to pass –X:MTA on the command line,
+as the ICorDebug objects only work from a multi-threaded apartment. When you run it,
+you get something that looks like this:
+&lt;/p&gt;
+&lt;p&gt;
+&lt;font face="Consolas, Lucida Console, Courier"&gt;» ipy -X:MTA ipydbg.py simpletest.py 
+&lt;br /&gt;
+OnCreateAppDomain DefaultDomain 
+&lt;br /&gt;
+35 
+&lt;br /&gt;
+OnProcessExit&lt;/font&gt;
+&lt;/p&gt;
+&lt;p&gt;
+Simpletest.py is a very simple script that prints the results of adding two numbers
+together. Here, you see the event handlers fire by writing text out to the console. 
+&lt;/p&gt;
+&lt;p&gt;
+For those of you who’d like to see this code actually run on your machine, I’ve created
+an ipydbg project &lt;a href="http://github.com/devhawk/ipydbg/tree/master"&gt;up on GitHub&lt;/a&gt;.
+The tree version that goes with this blog post &lt;a href="http://github.com/devhawk/ipydbg/tree/5858695ff85ed4740ad06466d4f54394e7f00f9b"&gt;is
+here&lt;/a&gt;. If you’re not running &lt;a href="http://git-scm.com/"&gt;Git&lt;/a&gt;, you can download
+a tar or zip of the project via the “download” button at the top of the page. It includes
+both the CorDebug source as well as the ipydbg.py file (shown above) and the simpletest.py
+file. It also has a compiled version of CorDebug.dll, so you don’t have to compile
+it yourself (for those IPy only coders who don’t have VS on their machine).
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=f7cea3aa-460b-4f8d-a76e-a24df4543e38" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=f7cea3aa-460b-4f8d-a76e-a24df4543e38</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,f7cea3aa-460b-4f8d-a76e-a24df4543e38.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,f7cea3aa-460b-4f8d-a76e-a24df4543e38.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=f7cea3aa-460b-4f8d-a76e-a24df4543e38</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/02/28/Writing+An+IronPython+Debugger+Hello+Debugger.aspx</feedburner:origLink></item><item><title>Writing an IronPython Debugger: MDbg 101</title><link>http://feedproxy.google.com/~r/Devhawk/~3/DljUKEtNO4w/Writing+An+IronPython+Debugger+MDbg+101.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Fri, 27 Feb 2009 15:33:06 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,c122a8ee-102f-4478-a33b-cc0864b82d83.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+Before I start writing any debugger code, I thought it would help to quickly review
+the .NET debugger infrastructure that is available as well as the design of the MDbg
+command line debugger. Please note, my understanding of this stuff is fairly rudimentary
+– <a href="http://blogs.msdn.com/jmstall/default.aspx">Mike Stall</a> is “da man”
+if you’re looking for a .NET debugger blogger to read.
+</p>
+        <p>
+The CLR provides a series of unmanaged APIs for things like <a href="http://msdn.microsoft.com/en-us/library/ms404385.aspx">hosting
+the CLR</a>, <a href="http://msdn.microsoft.com/en-us/library/ms404384.aspx">reading
+and writing CLR metadata</a> and – more relevant to our current discussion – <a href="http://msdn.microsoft.com/en-us/library/ms404520.aspx">debugging</a> as
+well as <a href="http://msdn.microsoft.com/en-us/library/ms404519.aspx">reading and
+writing debugger symbols</a>. These APIs are exposed as COM objects. The CLR Debugging
+API allows you to do those all the things you would expect to be able to do in a debugger: <a href="http://msdn.microsoft.com/en-us/library/ms230107.aspx">attach
+to processes</a> (actually, app domains), <a href="http://msdn.microsoft.com/en-us/library/ms233573.aspx">create
+breakpoints</a>, <a href="http://msdn.microsoft.com/en-us/library/ms233136.aspx">step
+thru code</a>, etc. Of course, being an unmanaged API, it’s pretty much unavailable
+to be used from IronPython. Luckily, MDbg wraps this unmanaged API for us, making
+it available to any managed language, including IronPython. 
+</p>
+        <p>
+The basic design of MDbg looks like this:
+</p>
+        <p>
+          <img style="border-bottom: 0px; border-left: 0px; display: block; float: none; margin-left: auto; border-top: 0px; margin-right: auto; border-right: 0px" title="image" border="0" alt="image" src="http://devhawk.net/content/binary/WindowsLiveWriter/WritinganIronPythonDebuggerMDbg101_DAA3/image_5.png" width="517" height="237"></img>
+        </p>
+        <p>
+At the bottom is the “raw” assembly, which contains the C# definitions of the unmanaged
+debugger API – basically anything that starts with <a href="http://msdn.microsoft.com/en-us/library/ms230588.aspx">ICorDebug</a> and <a href="http://msdn.microsoft.com/en-us/library/ms231592.aspx">ICorPublish</a>.
+Raw also defines some of the metadata API, since that’s how type information is exposed
+to the debugger. 
+</p>
+        <p>
+The next level up is the “corapi” assembly, which I refer to as the low-level managed
+debugger API. This is a fairly thin layer that translates the unmanaged paradigm into
+something more palatable to managed code developers. For example, COM enumerators
+such as <a href="http://msdn.microsoft.com/en-us/library/ms233115.aspx">ICorDebugAppDomainEnum</a> are
+exposed as IEnumerable types. Also, the <a href="http://msdn.microsoft.com/en-us/library/ms232496.aspx">managed
+callback interface</a> gets exposed as .NET events. It’s not perfect – the code is
+written in C# 1.0 style so there are no generics or yields. 
+</p>
+        <p>
+Where corapi is the low-level API, “mdbgeng” is the high-level managed debugger API.
+As you would expect, it wraps the low-level API and provides automatic implementations
+of common operations. For example, this layer maintains a list of breakpoints so you
+can create them before the relevant assembly has been loaded. Then when assemblies
+are loaded, it goes thru the list of unbound breakpoints to see if any can be bound.
+It’s also this layer that automatically creates the main entrypoint breakpoint. 
+</p>
+        <p>
+Finally, at the top we have the MDbg application itself, as well as any MDbg extensions
+(represented by the … in the diagram above). The mdbgext assembly defines the types
+shared between MDbg.exe and the extension assemblies. MDbg has some cool extensions
+– including an <a href="http://blogs.msdn.com/jmstall/archive/2005/08/31/Mdbg_Python_ext.aspx">IronPython
+extension</a> – but for now I’m focused on building something as lightweight as possible,
+so I’m going to forgo an extensibility mechanism, at least for now.
+</p>
+        <p>
+My initial prototype was written against the high-level API. There were two problems
+with this approach. The first is that there’s no support for Just My Code in the high-level
+API. As I mentioned in <a href="http://devhawk.net/2009/02/27/Writing+An+IronPython+Debugger+Introduction.aspx">my
+last post</a>, JMC support is critical for this project. Adding JMC support isn’t
+hard, but I’m trying to make as few changes as possible to the MDbg source, since
+I’m not interested in forking and maintaining that code. Second, while the low-level
+API provides an event-based API (OnModuleLoad, OnBreakpoint, OnStepComplete, etc),
+the high-level API provides a more console-oriented looping API. I found the event-driven
+API to be cleaner to work with and I’m thinking it will work better if I ever build
+a GUI version of ipydbg. So I’ve decided to work against the low-level API (aka corapi).
+</p>
+        <p>
+I mentioned above that I didn’t want to change the MDbg source, but I did make one
+small change. The separation of corapi and raw into two separate assemblies is an
+outdated artifact of an earlier version of MDbg. So I decided to combine these two
+into a single assembly called CorDebug. Other than some simple cleanup to assembly
+level attributes to make a single assembly possible, I haven’t changed the source
+code at all. 
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=c122a8ee-102f-4478-a33b-cc0864b82d83"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=DljUKEtNO4w:HDn5cLH02QU:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=DljUKEtNO4w:HDn5cLH02QU:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=DljUKEtNO4w:HDn5cLH02QU:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=DljUKEtNO4w:HDn5cLH02QU:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=DljUKEtNO4w:HDn5cLH02QU:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=DljUKEtNO4w:HDn5cLH02QU:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/DljUKEtNO4w" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+Before I start writing any debugger code, I thought it would help to quickly review
+the .NET debugger infrastructure that is available as well as the design of the MDbg
+command line debugger. Please note, my understanding of this stuff is fairly rudimentary
+– &lt;a href="http://blogs.msdn.com/jmstall/default.aspx"&gt;Mike Stall&lt;/a&gt; is “da man”
+if you’re looking for a .NET debugger blogger to read.
+&lt;/p&gt;
+&lt;p&gt;
+The CLR provides a series of unmanaged APIs for things like &lt;a href="http://msdn.microsoft.com/en-us/library/ms404385.aspx"&gt;hosting
+the CLR&lt;/a&gt;, &lt;a href="http://msdn.microsoft.com/en-us/library/ms404384.aspx"&gt;reading
+and writing CLR metadata&lt;/a&gt; and – more relevant to our current discussion – &lt;a href="http://msdn.microsoft.com/en-us/library/ms404520.aspx"&gt;debugging&lt;/a&gt; as
+well as &lt;a href="http://msdn.microsoft.com/en-us/library/ms404519.aspx"&gt;reading and
+writing debugger symbols&lt;/a&gt;. These APIs are exposed as COM objects. The CLR Debugging
+API allows you to do those all the things you would expect to be able to do in a debugger: &lt;a href="http://msdn.microsoft.com/en-us/library/ms230107.aspx"&gt;attach
+to processes&lt;/a&gt; (actually, app domains), &lt;a href="http://msdn.microsoft.com/en-us/library/ms233573.aspx"&gt;create
+breakpoints&lt;/a&gt;, &lt;a href="http://msdn.microsoft.com/en-us/library/ms233136.aspx"&gt;step
+thru code&lt;/a&gt;, etc. Of course, being an unmanaged API, it’s pretty much unavailable
+to be used from IronPython. Luckily, MDbg wraps this unmanaged API for us, making
+it available to any managed language, including IronPython. 
+&lt;/p&gt;
+&lt;p&gt;
+The basic design of MDbg looks like this:
+&lt;/p&gt;
+&lt;p&gt;
+&lt;img style="border-bottom: 0px; border-left: 0px; display: block; float: none; margin-left: auto; border-top: 0px; margin-right: auto; border-right: 0px" title="image" border="0" alt="image" src="http://devhawk.net/content/binary/WindowsLiveWriter/WritinganIronPythonDebuggerMDbg101_DAA3/image_5.png" width="517" height="237" /&gt;
+&lt;/p&gt;
+&lt;p&gt;
+At the bottom is the “raw” assembly, which contains the C# definitions of the unmanaged
+debugger API – basically anything that starts with &lt;a href="http://msdn.microsoft.com/en-us/library/ms230588.aspx"&gt;ICorDebug&lt;/a&gt; and &lt;a href="http://msdn.microsoft.com/en-us/library/ms231592.aspx"&gt;ICorPublish&lt;/a&gt;.
+Raw also defines some of the metadata API, since that’s how type information is exposed
+to the debugger. 
+&lt;/p&gt;
+&lt;p&gt;
+The next level up is the “corapi” assembly, which I refer to as the low-level managed
+debugger API. This is a fairly thin layer that translates the unmanaged paradigm into
+something more palatable to managed code developers. For example, COM enumerators
+such as &lt;a href="http://msdn.microsoft.com/en-us/library/ms233115.aspx"&gt;ICorDebugAppDomainEnum&lt;/a&gt; are
+exposed as IEnumerable types. Also, the &lt;a href="http://msdn.microsoft.com/en-us/library/ms232496.aspx"&gt;managed
+callback interface&lt;/a&gt; gets exposed as .NET events. It’s not perfect – the code is
+written in C# 1.0 style so there are no generics or yields. 
+&lt;/p&gt;
+&lt;p&gt;
+Where corapi is the low-level API, “mdbgeng” is the high-level managed debugger API.
+As you would expect, it wraps the low-level API and provides automatic implementations
+of common operations. For example, this layer maintains a list of breakpoints so you
+can create them before the relevant assembly has been loaded. Then when assemblies
+are loaded, it goes thru the list of unbound breakpoints to see if any can be bound.
+It’s also this layer that automatically creates the main entrypoint breakpoint. 
+&lt;/p&gt;
+&lt;p&gt;
+Finally, at the top we have the MDbg application itself, as well as any MDbg extensions
+(represented by the … in the diagram above). The mdbgext assembly defines the types
+shared between MDbg.exe and the extension assemblies. MDbg has some cool extensions
+– including an &lt;a href="http://blogs.msdn.com/jmstall/archive/2005/08/31/Mdbg_Python_ext.aspx"&gt;IronPython
+extension&lt;/a&gt; – but for now I’m focused on building something as lightweight as possible,
+so I’m going to forgo an extensibility mechanism, at least for now.
+&lt;/p&gt;
+&lt;p&gt;
+My initial prototype was written against the high-level API. There were two problems
+with this approach. The first is that there’s no support for Just My Code in the high-level
+API. As I mentioned in &lt;a href="http://devhawk.net/2009/02/27/Writing+An+IronPython+Debugger+Introduction.aspx"&gt;my
+last post&lt;/a&gt;, JMC support is critical for this project. Adding JMC support isn’t
+hard, but I’m trying to make as few changes as possible to the MDbg source, since
+I’m not interested in forking and maintaining that code. Second, while the low-level
+API provides an event-based API (OnModuleLoad, OnBreakpoint, OnStepComplete, etc),
+the high-level API provides a more console-oriented looping API. I found the event-driven
+API to be cleaner to work with and I’m thinking it will work better if I ever build
+a GUI version of ipydbg. So I’ve decided to work against the low-level API (aka corapi).
+&lt;/p&gt;
+&lt;p&gt;
+I mentioned above that I didn’t want to change the MDbg source, but I did make one
+small change. The separation of corapi and raw into two separate assemblies is an
+outdated artifact of an earlier version of MDbg. So I decided to combine these two
+into a single assembly called CorDebug. Other than some simple cleanup to assembly
+level attributes to make a single assembly possible, I haven’t changed the source
+code at all. 
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=c122a8ee-102f-4478-a33b-cc0864b82d83" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=c122a8ee-102f-4478-a33b-cc0864b82d83</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,c122a8ee-102f-4478-a33b-cc0864b82d83.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,c122a8ee-102f-4478-a33b-cc0864b82d83.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=c122a8ee-102f-4478-a33b-cc0864b82d83</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/02/27/Writing+An+IronPython+Debugger+MDbg+101.aspx</feedburner:origLink></item><item><title>Writing an IronPython Debugger: Introduction</title><link>http://feedproxy.google.com/~r/Devhawk/~3/iTWEVCCASac/Writing+An+IronPython+Debugger+Introduction.aspx</link><category>Debugger</category><category>IronPython</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Fri, 27 Feb 2009 14:21:22 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,54503f67-9452-4f6b-aa28-a9978416ce5b.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+A while back I <a href="http://devhawk.net/2008/05/08/Debugging+IronPython+Code+In+Visual+Studio.aspx">showed
+how</a> you can use Visual Studio to debug IronPython scripts. While that works great,
+it’s lots of steps and lots of mouse work. I yearned for something lighter weight
+and that I could drive from the command line. 
+</p>
+        <p>
+The .NET framework includes a command line debugger called <a href="http://msdn.microsoft.com/en-us/library/ms229861.aspx">MDbg</a>,
+but after using it for a bit, I found it didn’t like it very much for IronPython debugging.
+Mdbg automatically sets a breakpoint on the main entrypoint function, but only if
+it can find the debugging symbols. So when you use Mdbg with the released version
+of IPy, the breakpoint never gets set. Instead, you have to trap the module load event,
+set a breakpoint in the python file you’re debugging, then stop trapping the module
+load event. Every Time. That gets tedious.
+</p>
+        <p>
+Another problem with MDbg is that it’s not <a href="http://blogs.msdn.com/jmstall/archive/2004/12/31/344832.aspx">Just-My-Code</a> (aka
+JMC) aware. JMC is this awesome debugging feature that was introduced in .NET 2.0
+that lets the debugger “paint” the parts of the code that you want to step thru (aka
+“My Code”). By default, Visual Studio marks code with symbols as “my code” and code
+without symbols as “not my code”. [1] We don’t ship symbols with IronPython releases,
+so Visual Studio does only steps thru the python code. MDbg doesn’t support JMC, so
+I often found myself stepping into random parts of the IronPython implementation.
+That’s even more tedious.
+</p>
+        <p>
+Luckily, the <a href="http://www.microsoft.com/downloads/details.aspx?familyid=38449a42-6b7a-4e28-80ce-c55645ab1310&amp;displaylang=en">source
+code</a> to MDbg is available. So I got the wacky idea to build a debugger specifically
+for IronPython. CPython includes <a href="http://docs.python.org/library/pdb.html">pdb</a> (aka
+Python Debugger, not <a href="http://msdn.microsoft.com/en-us/library/yd4f8bd1.aspx">Program
+Database</a>) but we don’t support it because we <a href="http://ironpython.codeplex.com/WorkItem/View.aspx?WorkItemId=1042">haven’t
+implemented</a><a href="http://docs.python.org/library/sys.html#sys.settrace">settrace</a>.
+Thus, ipydbg was born.
+</p>
+        <p>
+Over the course of this series of blog posts, I’m going to build out ipydbg. I have
+built out a series of prototypes so I fairly confident that I know <em>how</em> to
+build it. However, I’m not sure what it will look like at the end. If you’ve got any
+strong opinions on it one way or the other, be sure to email me or leave me comments. 
+</p>
+        <p>
+BTW, major thanks to my VSL teammate <a href="http://blogs.msdn.com/jmstall">Mike
+Stall</a> (of Mike Stall's .NET Debugging Blog). Without his help, I would probably
+still be trying to make heads or tails of the MDbg source.
+</p>
+        <hr></hr>
+        <p>
+[1] VS uses the <a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.debuggernonusercodeattribute.aspx">DebuggerNonUserCode</a> attribute
+to provide fine grained control of what is considered “my code” and should be stepped
+thru. 
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=54503f67-9452-4f6b-aa28-a9978416ce5b"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~ff/Devhawk?a=iTWEVCCASac:nMon-5oA1EA:yIl2AUoC8zA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=yIl2AUoC8zA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=iTWEVCCASac:nMon-5oA1EA:7Q72WNTAKBA"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=7Q72WNTAKBA" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=iTWEVCCASac:nMon-5oA1EA:XQ266DUsA9M"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=XQ266DUsA9M" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=iTWEVCCASac:nMon-5oA1EA:dnMXMwOfBR0"><img src="http://feeds2.feedburner.com/~ff/Devhawk?d=dnMXMwOfBR0" border="0"></img></a> <a href="http://feeds2.feedburner.com/~ff/Devhawk?a=iTWEVCCASac:nMon-5oA1EA:V_sGLiPBpWU"><img src="http://feeds2.feedburner.com/~ff/Devhawk?i=iTWEVCCASac:nMon-5oA1EA:V_sGLiPBpWU" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/iTWEVCCASac" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+A while back I &lt;a href="http://devhawk.net/2008/05/08/Debugging+IronPython+Code+In+Visual+Studio.aspx"&gt;showed
+how&lt;/a&gt; you can use Visual Studio to debug IronPython scripts. While that works great,
+it’s lots of steps and lots of mouse work. I yearned for something lighter weight
+and that I could drive from the command line. 
+&lt;/p&gt;
+&lt;p&gt;
+The .NET framework includes a command line debugger called &lt;a href="http://msdn.microsoft.com/en-us/library/ms229861.aspx"&gt;MDbg&lt;/a&gt;,
+but after using it for a bit, I found it didn’t like it very much for IronPython debugging.
+Mdbg automatically sets a breakpoint on the main entrypoint function, but only if
+it can find the debugging symbols. So when you use Mdbg with the released version
+of IPy, the breakpoint never gets set. Instead, you have to trap the module load event,
+set a breakpoint in the python file you’re debugging, then stop trapping the module
+load event. Every Time. That gets tedious.
+&lt;/p&gt;
+&lt;p&gt;
+Another problem with MDbg is that it’s not &lt;a href="http://blogs.msdn.com/jmstall/archive/2004/12/31/344832.aspx"&gt;Just-My-Code&lt;/a&gt; (aka
+JMC) aware. JMC is this awesome debugging feature that was introduced in .NET 2.0
+that lets the debugger “paint” the parts of the code that you want to step thru (aka
+“My Code”). By default, Visual Studio marks code with symbols as “my code” and code
+without symbols as “not my code”. [1] We don’t ship symbols with IronPython releases,
+so Visual Studio does only steps thru the python code. MDbg doesn’t support JMC, so
+I often found myself stepping into random parts of the IronPython implementation.
+That’s even more tedious.
+&lt;/p&gt;
+&lt;p&gt;
+Luckily, the &lt;a href="http://www.microsoft.com/downloads/details.aspx?familyid=38449a42-6b7a-4e28-80ce-c55645ab1310&amp;amp;displaylang=en"&gt;source
+code&lt;/a&gt; to MDbg is available. So I got the wacky idea to build a debugger specifically
+for IronPython. CPython includes &lt;a href="http://docs.python.org/library/pdb.html"&gt;pdb&lt;/a&gt; (aka
+Python Debugger, not &lt;a href="http://msdn.microsoft.com/en-us/library/yd4f8bd1.aspx"&gt;Program
+Database&lt;/a&gt;) but we don’t support it because we &lt;a href="http://ironpython.codeplex.com/WorkItem/View.aspx?WorkItemId=1042"&gt;haven’t
+implemented&lt;/a&gt; &lt;a href="http://docs.python.org/library/sys.html#sys.settrace"&gt;settrace&lt;/a&gt;.
+Thus, ipydbg was born.
+&lt;/p&gt;
+&lt;p&gt;
+Over the course of this series of blog posts, I’m going to build out ipydbg. I have
+built out a series of prototypes so I fairly confident that I know &lt;em&gt;how&lt;/em&gt; to
+build it. However, I’m not sure what it will look like at the end. If you’ve got any
+strong opinions on it one way or the other, be sure to email me or leave me comments. 
+&lt;/p&gt;
+&lt;p&gt;
+BTW, major thanks to my VSL teammate &lt;a href="http://blogs.msdn.com/jmstall"&gt;Mike
+Stall&lt;/a&gt; (of Mike Stall's .NET Debugging Blog). Without his help, I would probably
+still be trying to make heads or tails of the MDbg source.
+&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;
+[1] VS uses the &lt;a href="http://msdn.microsoft.com/en-us/library/system.diagnostics.debuggernonusercodeattribute.aspx"&gt;DebuggerNonUserCode&lt;/a&gt; attribute
+to provide fine grained control of what is considered “my code” and should be stepped
+thru. 
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=54503f67-9452-4f6b-aa28-a9978416ce5b" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=54503f67-9452-4f6b-aa28-a9978416ce5b</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,54503f67-9452-4f6b-aa28-a9978416ce5b.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,54503f67-9452-4f6b-aa28-a9978416ce5b.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=54503f67-9452-4f6b-aa28-a9978416ce5b</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/02/27/Writing+An+IronPython+Debugger+Introduction.aspx</feedburner:origLink></item><item><title>Avalanche 4, Caps 1</title><link>http://feedproxy.google.com/~r/Devhawk/~3/sxwPD5UD7co/Avalanche+4+Caps+1.aspx</link><category>Hockey</category><category>Washington Capitals</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Sat, 21 Feb 2009 13:11:12 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,bea39eb1-11d7-4a20-8f44-e0217424e559.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <blockquote>
+          <p>
+"We had nothing; we were horrible out there," Boudreau snapped. "Everybody
+had their bad game at the same time. You win a lot of games in a row, you're going
+to have a stinker. Today was it." 
+<br><a href="http://voices.washingtonpost.com/capitalsinsider/2009/02/avs_4_caps_1.html">Capitals
+Insider</a></p>
+        </blockquote>
+        <p>
+Boy, it’s much more fun to write a Caps wrapup <a href="http://devhawk.net/2009/02/19/Caps+4+Canadians+3+SO.aspx">when
+they win</a>.
+</p>
+        <p>
+Honestly, the less said about this game, the better. I said at both intermissions
+that the Caps were lucky to be tied/down by only one, and the third period proved
+me right. Honestly, if I didn’t know the players and the teams, I wouldn’t have been
+able to tell which team was #2 in the East and which team was #15 in the West. 
+</p>
+        <p>
+The only good things I can say about this game are:
+</p>
+        <ol>
+          <li>
+Perfect on the penalty kill, including 43 seconds of 5-on-3</li>
+          <li>
+            <a href="http://www.nhl.tv/team/console.jsp?hlg=20082009,2,871&amp;event=WSH208">Backstrom’s
+goal</a> was nice</li>
+          <li>
+Much better on faceoffs – as a team, we won 60% of them. Only Nylander was below 50%.
+Steckel won 9 of 10</li>
+          <li>
+Err, did I mention the Caps were perfect on the PK?</li>
+        </ol>
+        <p>
+          <a href="http://www.japersrink.com/2009/2/20/766648/recap-avs-4-caps-1">Japers pointed
+out</a> that “the frequency with which these "efforts" are happening that
+is more than a little disconcerting.” After last night’s effort plus the 3rd period
+effort against Montreal, “more than a little disconcerting” is spot on.
+</p>
+        <p>
+Next up, Caps play the Penguins tomorrow. The Pens just beat the Flyers 5-4. I didn’t
+see the whole game but Biron totally botched the play that lead to the Pens game winning
+goal. So we have the Pens riding a big win and the Caps coming off a lackluster performance
+on national TV. Should be interesting to say the least. Unfortunately, I’ve got a
+morning flight home to Seattle tomorrow, so I’m going to miss it.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=bea39eb1-11d7-4a20-8f44-e0217424e559"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~f/Devhawk?a=DyL9wjfl"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=41" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=TLnmHBrH"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=50" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=Sj4RlqLx"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=327" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=YYm3BHMJ"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=43" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=VMwZQUBc"><img src="http://feeds2.feedburner.com/~f/Devhawk?i=VMwZQUBc" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/sxwPD5UD7co" height="1" width="1"/>]]></content:encoded><description>&lt;blockquote&gt; 
+&lt;p&gt;
+&amp;quot;We had nothing; we were horrible out there,&amp;quot; Boudreau snapped. &amp;quot;Everybody
+had their bad game at the same time. You win a lot of games in a row, you're going
+to have a stinker. Today was it.&amp;quot; 
+&lt;br /&gt;
+&lt;a href="http://voices.washingtonpost.com/capitalsinsider/2009/02/avs_4_caps_1.html"&gt;Capitals
+Insider&lt;/a&gt;
+&lt;/p&gt;
+&lt;/blockquote&gt; 
+&lt;p&gt;
+Boy, it’s much more fun to write a Caps wrapup &lt;a href="http://devhawk.net/2009/02/19/Caps+4+Canadians+3+SO.aspx"&gt;when
+they win&lt;/a&gt;.
+&lt;/p&gt;
+&lt;p&gt;
+Honestly, the less said about this game, the better. I said at both intermissions
+that the Caps were lucky to be tied/down by only one, and the third period proved
+me right. Honestly, if I didn’t know the players and the teams, I wouldn’t have been
+able to tell which team was #2 in the East and which team was #15 in the West. 
+&lt;/p&gt;
+&lt;p&gt;
+The only good things I can say about this game are:
+&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+Perfect on the penalty kill, including 43 seconds of 5-on-3&lt;/li&gt;
+&lt;li&gt;
+&lt;a href="http://www.nhl.tv/team/console.jsp?hlg=20082009,2,871&amp;amp;event=WSH208"&gt;Backstrom’s
+goal&lt;/a&gt; was nice&lt;/li&gt;
+&lt;li&gt;
+Much better on faceoffs – as a team, we won 60% of them. Only Nylander was below 50%.
+Steckel won 9 of 10&lt;/li&gt;
+&lt;li&gt;
+Err, did I mention the Caps were perfect on the PK?&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;
+&lt;a href="http://www.japersrink.com/2009/2/20/766648/recap-avs-4-caps-1"&gt;Japers pointed
+out&lt;/a&gt; that “the frequency with which these &amp;quot;efforts&amp;quot; are happening that
+is more than a little disconcerting.” After last night’s effort plus the 3rd period
+effort against Montreal, “more than a little disconcerting” is spot on.
+&lt;/p&gt;
+&lt;p&gt;
+Next up, Caps play the Penguins tomorrow. The Pens just beat the Flyers 5-4. I didn’t
+see the whole game but Biron totally botched the play that lead to the Pens game winning
+goal. So we have the Pens riding a big win and the Caps coming off a lackluster performance
+on national TV. Should be interesting to say the least. Unfortunately, I’ve got a
+morning flight home to Seattle tomorrow, so I’m going to miss it.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=bea39eb1-11d7-4a20-8f44-e0217424e559" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=bea39eb1-11d7-4a20-8f44-e0217424e559</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,bea39eb1-11d7-4a20-8f44-e0217424e559.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,bea39eb1-11d7-4a20-8f44-e0217424e559.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=bea39eb1-11d7-4a20-8f44-e0217424e559</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/02/21/Avalanche+4+Caps+1.aspx</feedburner:origLink></item><item><title>Caps 4, Canadians 3 (SO)</title><link>http://feedproxy.google.com/~r/Devhawk/~3/gmoql1CSglQ/Caps+4+Canadians+3+SO.aspx</link><category>Hockey</category><category>Washington Capitals</category><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Harry Pierson</dc:creator><pubDate>Wed, 18 Feb 2009 21:27:02 PST</pubDate><guid isPermaLink="false">http://devhawk.net/PermaLink,guid,aa56aae7-3ca1-4e9d-81d6-4cadf12eb1e2.aspx</guid><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[
+        <p>
+I don’t get the chance to see many Caps games, being as I live over 2000 miles away
+from Washington D.C. I got to see them tonight live and in person for the first time
+in like four years, and it was awesome. Awesome to be there that is, even if the Caps
+were less than awesome in the third period. Frankly, I think the Caps were lucky to
+get one, much less two points in this game. 
+</p>
+        <p>
+But before I talk about bad, let’s start with the amazing. Ovechkin’s goal was the
+most amazing a goal I’ve ever seen live. He leaves Hamrlik in the dust by banking
+the puck off the boards to himself while he does a 180 to reverse direction. Then
+he gets knocked down by Chipchura but still manages to slide the puck into the net
+under Price while lying on his side on the ice before Chipchura’s momentum knocks
+the net off it’s moorings. You’ve got to see it to believe it.
+</p>
+        <p>
+          <iframe height="289" src="http://www.nhl.tv/team/embed.jsp?hlg=20082009,2,856&amp;event=WSH47" frameborder="0" width="480" align="center">
+          </iframe>
+        </p>
+        <p>
+          <a href="http://twitpic.com/1k73u">
+            <img style="border-right-width: 0px; margin: 0px 0px 0px 5px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px" title="Crosby Sucks Caps Jersey" border="0" alt="Crosby Sucks Caps Jersey" align="right" src="http://devhawk.net/content/binary/WindowsLiveWriter/Caps4Canadians3SO_655/1k73u-34dd2010d2b88ae59d73e34440148648.499ce477%5B1%5D_3.jpg" width="244" height="184"></img>
+          </a>Honestly,
+I think this is even better than “<a href="http://www.youtube.com/watch?v=TqCgwpkOpUo">The
+Goal</a>” from Ovechkin’s rookie season. The goal itself maybe wasn’t quite as amazing,
+but the bank pass to himself while reversing direction that set up the goal was literally
+jaw-dropping. That with the knocked down goal in succession was truly a work of art.
+They showed it about a dozen times on the jumbo-tron, several times on the NHL network
+highlight show and I’ve watched the embedded video maybe a dozen times while writing
+this post. Anyone who thinks Ovechkin isn’t the best player in the league is frakking
+crazy. 
+</p>
+        <p>
+Backstom’s <a href="http://www.nhl.tv/team/console.jsp?hlg=20082009,2,856&amp;event=WSH212">give
+and go with Federov</a> for the second goal wasn’t bad either. 
+</p>
+        <p>
+But here’s the stat of the game that should give Caps fans nightmares: All three of
+Montreal’s goals came on the powerplay. Caps did fairly well in the penalty taking
+department – only taking four penalties on the night. But going 25% on the penalty
+kill? There’s no way to spin how ugly that is. To add insult to injury, two of the
+three goals came less than ten seconds into the penalty – Montreal scored before the
+Caps could even get their kill set up. Ugh. The first was had two Caps getting tied
+up in the faceoff circle, leaving Higgins open to score. The second I think went off
+Erskine’s stick and over Theodore. And the third looked like one Theodore should have
+had. 
+</p>
+        <p>
+The third period, the Caps looked totally flat until Steckel’s nice tip in to tie
+the game. They didn’t seem to be winning any one-on-one battles for the puck. I know
+the Caps have talent to spare, but they need to win on the boards if they’re going
+to win on the scoreboard. They picked it up for the last three minutes of the third
+and Overtime (except for very scary giveaway by I think Nylander near the end of OT
+that the Habs couldn’t capitalize on). 
+</p>
+        <p>
+Giveaways were a problem – Caps had 12 to Montreal’s 6 – and Backstrom got slapped
+around in the faceoff circle, winning only 6 of 18. Nylander had a bad night on the
+dot, going 2 of 8. On the plus side, Caps had 17 takeaways to Montreal’s 7 and Gordon,
+Steckel and Laich and Federov all were over 50% on the faceoffs (team as a whole won
+27 of 58, or 47%.)
+</p>
+        <p>
+As I said, I don’t get to see the Caps often, but I hear they aren’t that good in
+the shootout, which is kinda surprising given the surplus of offensive talent on the
+team. They were 2-3 in the shootout going into tonight, while the Habs were 7-4. But
+the Caps were perfect, Semin and Backstrom scoring while Theodore stoned Plekanec
+and Markov.
+</p>
+        <p>
+In the end, it’s two points which puts us a full game up on the Devils for 2nd in
+the East and seven games up on Florida who’s technically chasing us for the SouthEast
+division crown. Not quite in the bag, but making up that much ground in the 24 games
+remaining is pretty daunting. The Caps trail Boston by four and a half games for the
+top seed in the east, which is also a daunting task given the amount of season remaining.
+I’d love to be in first, but I’m pretty happy with where the Caps are right now –
+except maybe for the PK.
+</p>
+        <img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=aa56aae7-3ca1-4e9d-81d6-4cadf12eb1e2"></img>
+      <div class="feedflare">
+<a href="http://feeds2.feedburner.com/~f/Devhawk?a=OhCrkkvD"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=41" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=fLzA9NRv"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=50" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=sOESX8GK"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=327" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=BK0Ocnb2"><img src="http://feeds2.feedburner.com/~f/Devhawk?d=43" border="0"></img></a> <a href="http://feeds2.feedburner.com/~f/Devhawk?a=I5w4RjP2"><img src="http://feeds2.feedburner.com/~f/Devhawk?i=I5w4RjP2" border="0"></img></a>
+</div><img src="http://feeds2.feedburner.com/~r/Devhawk/~4/gmoql1CSglQ" height="1" width="1"/>]]></content:encoded><description>&lt;p&gt;
+I don’t get the chance to see many Caps games, being as I live over 2000 miles away
+from Washington D.C. I got to see them tonight live and in person for the first time
+in like four years, and it was awesome. Awesome to be there that is, even if the Caps
+were less than awesome in the third period. Frankly, I think the Caps were lucky to
+get one, much less two points in this game. 
+&lt;/p&gt;
+&lt;p&gt;
+But before I talk about bad, let’s start with the amazing. Ovechkin’s goal was the
+most amazing a goal I’ve ever seen live. He leaves Hamrlik in the dust by banking
+the puck off the boards to himself while he does a 180 to reverse direction. Then
+he gets knocked down by Chipchura but still manages to slide the puck into the net
+under Price while lying on his side on the ice before Chipchura’s momentum knocks
+the net off it’s moorings. You’ve got to see it to believe it.
+&lt;/p&gt;
+&lt;p&gt;
+&lt;iframe height="289" src="http://www.nhl.tv/team/embed.jsp?hlg=20082009,2,856&amp;amp;event=WSH47" frameborder="0" width="480" align="center"&gt;
+&lt;/iframe&gt;
+&lt;/p&gt;
+&lt;p&gt;
+&lt;a href="http://twitpic.com/1k73u"&gt;&lt;img style="border-right-width: 0px; margin: 0px 0px 0px 5px; display: inline; border-top-width: 0px; border-bottom-width: 0px; border-left-width: 0px" title="Crosby Sucks Caps Jersey" border="0" alt="Crosby Sucks Caps Jersey" align="right" src="http://devhawk.net/content/binary/WindowsLiveWriter/Caps4Canadians3SO_655/1k73u-34dd2010d2b88ae59d73e34440148648.499ce477%5B1%5D_3.jpg" width="244" height="184" /&gt;&lt;/a&gt;Honestly,
+I think this is even better than “&lt;a href="http://www.youtube.com/watch?v=TqCgwpkOpUo"&gt;The
+Goal&lt;/a&gt;” from Ovechkin’s rookie season. The goal itself maybe wasn’t quite as amazing,
+but the bank pass to himself while reversing direction that set up the goal was literally
+jaw-dropping. That with the knocked down goal in succession was truly a work of art.
+They showed it about a dozen times on the jumbo-tron, several times on the NHL network
+highlight show and I’ve watched the embedded video maybe a dozen times while writing
+this post. Anyone who thinks Ovechkin isn’t the best player in the league is frakking
+crazy. 
+&lt;/p&gt;
+&lt;p&gt;
+Backstom’s &lt;a href="http://www.nhl.tv/team/console.jsp?hlg=20082009,2,856&amp;amp;event=WSH212"&gt;give
+and go with Federov&lt;/a&gt; for the second goal wasn’t bad either. 
+&lt;/p&gt;
+&lt;p&gt;
+But here’s the stat of the game that should give Caps fans nightmares: All three of
+Montreal’s goals came on the powerplay. Caps did fairly well in the penalty taking
+department – only taking four penalties on the night. But going 25% on the penalty
+kill? There’s no way to spin how ugly that is. To add insult to injury, two of the
+three goals came less than ten seconds into the penalty – Montreal scored before the
+Caps could even get their kill set up. Ugh. The first was had two Caps getting tied
+up in the faceoff circle, leaving Higgins open to score. The second I think went off
+Erskine’s stick and over Theodore. And the third looked like one Theodore should have
+had. 
+&lt;/p&gt;
+&lt;p&gt;
+The third period, the Caps looked totally flat until Steckel’s nice tip in to tie
+the game. They didn’t seem to be winning any one-on-one battles for the puck. I know
+the Caps have talent to spare, but they need to win on the boards if they’re going
+to win on the scoreboard. They picked it up for the last three minutes of the third
+and Overtime (except for very scary giveaway by I think Nylander near the end of OT
+that the Habs couldn’t capitalize on). 
+&lt;/p&gt;
+&lt;p&gt;
+Giveaways were a problem – Caps had 12 to Montreal’s 6 – and Backstrom got slapped
+around in the faceoff circle, winning only 6 of 18. Nylander had a bad night on the
+dot, going 2 of 8. On the plus side, Caps had 17 takeaways to Montreal’s 7 and Gordon,
+Steckel and Laich and Federov all were over 50% on the faceoffs (team as a whole won
+27 of 58, or 47%.)
+&lt;/p&gt;
+&lt;p&gt;
+As I said, I don’t get to see the Caps often, but I hear they aren’t that good in
+the shootout, which is kinda surprising given the surplus of offensive talent on the
+team. They were 2-3 in the shootout going into tonight, while the Habs were 7-4. But
+the Caps were perfect, Semin and Backstrom scoring while Theodore stoned Plekanec
+and Markov.
+&lt;/p&gt;
+&lt;p&gt;
+In the end, it’s two points which puts us a full game up on the Devils for 2nd in
+the East and seven games up on Florida who’s technically chasing us for the SouthEast
+division crown. Not quite in the bag, but making up that much ground in the 24 games
+remaining is pretty daunting. The Caps trail Boston by four and a half games for the
+top seed in the east, which is also a daunting task given the amount of season remaining.
+I’d love to be in first, but I’m pretty happy with where the Caps are right now –
+except maybe for the PK.
+&lt;/p&gt;
+&lt;img width="0" height="0" src="http://devhawk.net/aggbug.ashx?id=aa56aae7-3ca1-4e9d-81d6-4cadf12eb1e2" /&gt;</description><trackback:ping xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/">http://devhawk.net/Trackback.aspx?guid=aa56aae7-3ca1-4e9d-81d6-4cadf12eb1e2</trackback:ping><pingback:server xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/pingback.aspx</pingback:server><pingback:target xmlns:pingback="http://madskills.com/public/xml/rss/module/pingback/">http://devhawk.net/PermaLink,guid,aa56aae7-3ca1-4e9d-81d6-4cadf12eb1e2.aspx</pingback:target><wfw:comment xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/CommentView,guid,aa56aae7-3ca1-4e9d-81d6-4cadf12eb1e2.aspx</wfw:comment><wfw:commentRss xmlns:wfw="http://wellformedweb.org/CommentAPI/">http://devhawk.net/SyndicationService.asmx/GetEntryCommentsRss?guid=aa56aae7-3ca1-4e9d-81d6-4cadf12eb1e2</wfw:commentRss><feedburner:origLink>http://devhawk.net/2009/02/19/Caps+4+Canadians+3+SO.aspx</feedburner:origLink></item><item><title>Links for 2009-02-03 [del.icio.us]</title><link>http://feedproxy.google.com/~r/Devhawk/~3/Ii4N-i8P2xc/harrypierson</link><pubDate>Wed, 04 Feb 2009 00:00:00 PST</pubDate><guid isPermaLink="false">http://del.icio.us/harrypierson#2009-02-03</guid><description>&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://www.microsoft.com/learningspace/Semblio"&gt;Microsoft Semblio&lt;/a&gt;&lt;br/&gt;
+Interesting looking new toolkit from MSFT for creating rich, interactive learning materials on top of VS, .NET and WPF&lt;/li&gt;
+&lt;/ul&gt;&lt;img src="http://feeds2.feedburner.com/~r/Devhawk/~4/Ii4N-i8P2xc" height="1" width="1"/&gt;</description><feedburner:origLink>http://del.icio.us/harrypierson#2009-02-03</feedburner:origLink></item><item><title>Links for 2009-01-14 [del.icio.us]</title><link>http://feedproxy.google.com/~r/Devhawk/~3/ZSQqzaJL1Yk/harrypierson</link><pubDate>Thu, 15 Jan 2009 00:00:00 PST</pubDate><guid isPermaLink="false">http://del.icio.us/harrypierson#2009-01-14</guid><description>&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://download.microsoft.com/download/D/6/E/D6E0290E-8919-4672-B3F7-56001BDC6BFA/Windows%20Azure%20Blob%20-%20Dec%202008.docx"&gt;Windows Azure Blob Whitepaper&lt;/a&gt;&lt;br/&gt;
+This document describes Windows Azure Blob, and how to use it.  Windows Azure Blob enables applications to store large objects, up to 50GB each in the cloud.  It supports massively scalable blob system, where hot blobs will be served from many servers to scale out and meet the traffic needs of your application.   Furthermore, the system is highly available and durable.  You can always access your data from anywhere at any time, and the data is replicated at least 3 times for durability.   In addition, strong consistency is provided to ensure that the object is immediately accessible once it is added or updated; a subsequent read will immediately see the changes made from a previously committed write.&lt;/li&gt;
+&lt;li&gt;&lt;a href="http://ocw.mit.edu/OcwWeb/Electrical-Engineering-and-Computer-Science/6-189January--IAP--2008/CourseHome/index.htm"&gt;MIT OpenCourseWare | A Gentle Introduction to Programming Using Python&lt;/a&gt;&lt;br/&gt;
+This course will provide a gentle introduction to programming using Python™ for highly motivated students with little or no prior experience in programming computers. The course will focus on planning and organizing programs, as well as the grammar of the Python programming language. Lectures will be interactive featuring in-class exercises with lots of support from the course staff.&lt;/li&gt;
+&lt;/ul&gt;&lt;img src="http://feeds2.feedburner.com/~r/Devhawk/~4/ZSQqzaJL1Yk" height="1" width="1"/&gt;</description><feedburner:origLink>http://del.icio.us/harrypierson#2009-01-14</feedburner:origLink></item><item><title>Links for 2008-12-22 [del.icio.us]</title><link>http://feedproxy.google.com/~r/Devhawk/~3/dQmJe91k8Ik/harrypierson</link><pubDate>Tue, 23 Dec 2008 00:00:00 PST</pubDate><guid isPermaLink="false">http://del.icio.us/harrypierson#2008-12-22</guid><description>&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://jonas.follesoe.no/MeshenablingTheDiveLogSilverlightApplication.aspx"&gt;Mesh-enabling the Dive Log Silverlight Application&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;&lt;img src="http://feeds2.feedburner.com/~r/Devhawk/~4/dQmJe91k8Ik" height="1" width="1"/&gt;</description><feedburner:origLink>http://del.icio.us/harrypierson#2008-12-22</feedburner:origLink></item><item><title>Links for 2008-12-09 [del.icio.us]</title><link>http://feedproxy.google.com/~r/Devhawk/~3/moyPgcuERAc/harrypierson</link><pubDate>Wed, 10 Dec 2008 00:00:00 PST</pubDate><guid isPermaLink="false">http://del.icio.us/harrypierson#2008-12-09</guid><description>&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://code.activestate.com/recipes/439361/"&gt;List/Generator Monad Combinators in Python&lt;/a&gt;&lt;br/&gt;
+Given my interest in F# monads, this article on Python monads was very interesting to me.&lt;/li&gt;
+&lt;li&gt;&lt;a href="http://code.activestate.com/recipes/384122/"&gt;Pseudo-Infix operators in Python&lt;/a&gt;&lt;br/&gt;
+This approach to infix operators in Python has my brain spinning on other DSL-esque ideas&lt;/li&gt;
+&lt;/ul&gt;&lt;img src="http://feeds2.feedburner.com/~r/Devhawk/~4/moyPgcuERAc" height="1" width="1"/&gt;</description><feedburner:origLink>http://del.icio.us/harrypierson#2008-12-09</feedburner:origLink></item><item><title>Links for 2008-12-06 [del.icio.us]</title><link>http://feedproxy.google.com/~r/Devhawk/~3/76dGxPgmUH0/harrypierson</link><pubDate>Sun, 07 Dec 2008 00:00:00 PST</pubDate><guid isPermaLink="false">http://del.icio.us/harrypierson#2008-12-06</guid><description>&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://www.foodnetwork.com/recipes/hoisin-bbq-steak-on-a-stick-with-pineapple-salsa-kids-in-the-kitchen-recipe/index.html"&gt;Hoisin BBQ Steak-On-A-Stick with Pineapple Salsa&lt;/a&gt;&lt;br/&gt;
+Made this for dinner when Julianne was out of town. Kids liked the steak on a stick, but didn&amp;#039;t really like the pinaeapple salsa.&lt;/li&gt;
+&lt;li&gt;&lt;a href="http://family.go.com/food/recipe-ar-14924-yummy-honey-chicken-kabobs-t/"&gt;Yummy Honey Chicken Kabobs&lt;/a&gt;&lt;br/&gt;
+This looked good, but I ended up making beef kabobs the night before so I&amp;#039;m stashing this for later use&lt;/li&gt;
+&lt;/ul&gt;&lt;img src="http://feeds2.feedburner.com/~r/Devhawk/~4/76dGxPgmUH0" height="1" width="1"/&gt;</description><feedburner:origLink>http://del.icio.us/harrypierson#2008-12-06</feedburner:origLink></item><item><title>Links for 2008-11-06 [del.icio.us]</title><link>http://feedproxy.google.com/~r/Devhawk/~3/JyqzThs2po8/harrypierson</link><pubDate>Fri, 07 Nov 2008 00:00:00 PST</pubDate><guid isPermaLink="false">http://del.icio.us/harrypierson#2008-11-06</guid><description>&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://blogs.msdn.com/granth/archive/2008/11/03/converting-vs2010-ctp-to-hyper-v.aspx"&gt;Converting Virtual PC to Hyper-V&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="http://change.gov/"&gt;Change.gov - Office of President Elect Obama&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;&lt;img src="http://feeds2.feedburner.com/~r/Devhawk/~4/JyqzThs2po8" height="1" width="1"/&gt;</description><feedburner:origLink>http://del.icio.us/harrypierson#2008-11-06</feedburner:origLink></item></channel></rss>
