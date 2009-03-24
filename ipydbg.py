@@ -142,13 +142,6 @@ def do_step(thread, step_in):
       range = get_step_ranges(thread, reader)
       stepper.StepRange(step_in, range)      
       
-infrastructure_methods =  ['TryGetExtraValue', 
-    'TrySetExtraValue', 
-    '.cctor', 
-    '.ctor', 
-    'CustomSymbolDictionary.GetExtraKeys', 
-    'IModuleDictionaryInitialization.InitializeModuleDictionary']
-                  
 #--------------------------------------------
 # main IPyDebugProcess class
   
@@ -266,6 +259,13 @@ class IPyDebugProcess(object):
           print "OnProcessExit"
         self.terminate_event.Set()
    
+    infrastructure_methods =  ['TryGetExtraValue', 
+      'TrySetExtraValue', 
+      '.cctor', 
+      '.ctor', 
+      'CustomSymbolDictionary.GetExtraKeys', 
+      'IModuleDictionaryInitialization.InitializeModuleDictionary']
+      
     def OnClassLoad(self, sender, e):
         mt = e.Class.GetTypeInfo()
         with CC.DarkGray:
@@ -289,7 +289,7 @@ class IPyDebugProcess(object):
           e.Class.JMCStatus = True
           
           for mmi in mt.GetMethods():
-            if mmi.Name in infrastructure_methods:
+            if mmi.Name in IPyDebugProcess.infrastructure_methods:
               f = e.Class.Module.GetFunctionFromToken(mmi.MetadataToken)
               f.JMCStatus = False
 
