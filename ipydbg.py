@@ -169,7 +169,16 @@ def get_locals(frame, scope=None, offset = None):
     for s in scope.GetChildren():
       if s.StartOffset <= offset and s.EndOffset >= offset:
         for ret in get_locals(frame, s, offset): yield ret
-    
+
+_generic_element_types = [ CorElementType.ELEMENT_TYPE_BOOLEAN,
+     CorElementType.ELEMENT_TYPE_I1, CorElementType.ELEMENT_TYPE_U1,
+     CorElementType.ELEMENT_TYPE_I2, CorElementType.ELEMENT_TYPE_U2,
+     CorElementType.ELEMENT_TYPE_I4, CorElementType.ELEMENT_TYPE_U4,
+     CorElementType.ELEMENT_TYPE_I, CorElementType.ELEMENT_TYPE_U,                  
+     CorElementType.ELEMENT_TYPE_I8, CorElementType.ELEMENT_TYPE_U8,
+     CorElementType.ELEMENT_TYPE_R4, CorElementType.ELEMENT_TYPE_R8,
+     CorElementType.ELEMENT_TYPE_CHAR ]
+     
 def value_to_str(value):
     def deref(value):
         while True:
@@ -185,21 +194,22 @@ def value_to_str(value):
         if boxVal != None:
           return boxVal.GetObject()
         return value
-    def get_value(value):
-        if value == None: return "<N/A>"
-        value = deref(value)
-        if value == None: return "<None>"
-        return unbox(value)
-        
-    v = get_value(value)
-    if type(v) == str:
-      msg = v
-    elif v.Type == CorElementType.ELEMENT_TYPE_I4 or v.Type == CorElementType.ELEMENT_TYPE_BOOLEAN:
-      msg = v.CastToGenericValue().GetValue()
-    else:
-      msg = v.Type
+    
+    if value == None: return "<N/A>"
+    value = deref(value)
+    if value == None: return "<None>"
+    value = unbox(value)
+    
+    if value.Type in _generic_element_types:
+      return value.CastToGenericValue().GetValue().ToString()
+    elif value.Type in [CorElementType.ELEMENT_TYPE_CLASS, CorElementType.ELEMENT_TYPE_VALUETYPE]:
+      ti = value.CastToObjectValue().ExactType.Class.GetTypeInfo()
+      return ti.FullName
       
-    return msg
+    elif value.Type == CorElementType.ELEMENT_TYPE_STRING:
+      return value.CastToStringValue().String
+    else:
+      return str(value.Type)
   
 #--------------------------------------------
 # main IPyDebugProcess class
