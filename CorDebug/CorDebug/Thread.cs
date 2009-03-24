@@ -1104,6 +1104,15 @@ namespace Microsoft.Samples.Debugging.CorDebug
             var mi = new Microsoft.Samples.Debugging.CorMetadata.CorMetadataImport(this.Module);
             return mi.GetMethodInfo(this.Token);
         }
+
+        public System.Diagnostics.SymbolStore.ISymbolMethod GetSymbolMethod()
+        {
+            var reader = this.Class.Module.SymbolReader;
+            if (reader == null)
+                return null;
+
+            return reader.GetMethod(new System.Diagnostics.SymbolStore.SymbolToken(this.Token));
+        }
     }
 
     public sealed class CorContext : WrapperBase

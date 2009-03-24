@@ -88,13 +88,12 @@ def get_dynamic_frames(chain):
     yield f
 
 def get_location(function, offset):
-    reader = function.Module.SymbolReader
-    if reader == None:  
-        return None
-    method = reader.GetMethod(SymbolToken(function.Token))
+    symmethod = function.GetSymbolMethod()
+    if symmethod == None:
+      return None
 
     prev_sp = None
-    for sp in get_sequence_points(method):
+    for sp in get_sequence_points(symmethod):
         if sp.offset > offset: 
             break
         prev_sp = sp
@@ -127,8 +126,8 @@ def create_step_range(start, end):
 def get_step_ranges(thread, reader):
     frame = thread.ActiveFrame
     offset, mapResult = frame.GetIP()
-    method = reader.GetMethod(SymbolToken(frame.FunctionToken))
-    for sp in get_sequence_points(method):
+    symmethod = frame.Function.GetSymbolMethod()
+    for sp in get_sequence_points(symmethod):
         if sp.offset > offset:
             return create_step_range(offset, sp.offset)
     return create_step_range(offset, frame.Function.ILCode.Size)
@@ -147,8 +146,12 @@ def do_step(thread, step_in):
 
 def get_locals(frame, scope=None, offset = None):
     if scope == None:
-      for i in range(frame.GetLocalVariablesCount()):
-        yield "local_%d" % i, frame.GetLocalVariable(i)
+      symmethod = frame.Function.GetSymbolMethod()
+      if symmethod != None:
+        for l in get_locals(frame, symmethod.RootScope): yield l
+      else:
+        for i in range(frame.GetLocalVariablesCount()):
+          yield "local_%d" % i, frame.GetLocalVariable(i)
       
     else:
       for lv in scope.GetLocals():
@@ -246,8 +249,6 @@ class IPyDebugProcess(object):
             elif k.Key == ConsoleKey.L:
                 print "\nLocals"
                 frame = self.active_thread.ActiveFrame
-                reader = frame.Function.Class.Module.SymbolReader
-                symmethod = reader.GetMethod(SymbolToken(frame.FunctionToken))
                 
                 def deref(value):
                     while True:
@@ -270,13 +271,13 @@ class IPyDebugProcess(object):
                     return unbox(value)
                     
                     
-                locals = list(get_locals(frame, symmethod.RootScope))
+                locals = list(get_locals(frame))
                 max_local_name_len = 0
                 for l in locals:
                     max_local_name_len = max(max_local_name_len, len(l[0]))
                 local_fmt = "  %%-%ds %%s" % max_local_name_len
                 
-                for local_name,local_val in get_locals(frame, symmethod.RootScope):
+                for local_name,local_val in locals:
                   v = get_value(local_val)
                   if type(v) == str:
                     msg = v
