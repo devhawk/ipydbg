@@ -13,7 +13,7 @@ from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
 
 from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType
-from Microsoft.Samples.Debugging.CorDebug.NativeApi import CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason
+from Microsoft.Samples.Debugging.CorDebug.NativeApi import CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason, CorElementType
 from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
 from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
 from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
@@ -143,6 +143,9 @@ def do_step(thread, step_in):
       stepper.StepRange(step_in, range)      
       
 #--------------------------------------------
+# value functions
+
+#--------------------------------------------
 # main IPyDebugProcess class
   
 class IPyDebugProcess(object):
@@ -204,6 +207,15 @@ class IPyDebugProcess(object):
           with CC.Yellow: Console.Write(" ^^^")
         Console.WriteLine()
 
+    def _get_locals(self, frame, offset, scope):
+        for lv in scope.GetLocals():
+            v = frame.GetLocalVariable(lv.AddressField1)
+            yield lv, v
+        
+        for s in scope.GetChildren():
+          for ret in self._get_locals(frame, offset, s):
+            yield ret
+        
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
@@ -221,6 +233,46 @@ class IPyDebugProcess(object):
                 self.process.Stop(0)
                 self.process.Terminate(255)
                 return
+            elif k.Key == ConsoleKey.L:
+                print "\nLocals"
+                frame = self.active_thread.ActiveFrame
+                reader = frame.Function.Class.Module.SymbolReader
+                symmethod = reader.GetMethod(SymbolToken(frame.FunctionToken))
+                
+                def deref(value):
+                    while True:
+                        rv = value.CastToReferenceValue()
+                        if rv == None: break
+                        if (rv.IsNull): return None
+                        newValue = rv.Dereference()
+                        if newValue == None: break
+                        value = newValue
+                    return value
+                def unbox(value):
+                    boxVal = value.CastToBoxValue()
+                    if boxVal != None:
+                      return boxVal.GetObject()
+                    return value
+                def get_value(value):
+                    if value == None: return "<N/A>"
+                    value = deref(value)
+                    if value == None: return "<None>"
+                    return unbox(value)
+                    
+                    
+                          
+                for lv,v in self._get_locals(frame, offset, symmethod.RootScope):
+                  v = get_value(v)
+                  if type(v) == str:
+                    msg = v
+                  elif v.Type == CorElementType.ELEMENT_TYPE_I4 or v.Type == CorElementType.ELEMENT_TYPE_BOOLEAN:
+                    msg = v.CastToGenericValue().GetValue()
+                  else:
+                    msg = v.Type
+                  
+                  
+                  print "  ", lv.Name, msg
+                
             elif k.Key == ConsoleKey.T:
                 print "\nStack Trace"
                 get_frames = get_dynamic_frames(self.active_thread.ActiveChain) \
