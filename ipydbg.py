@@ -145,25 +145,30 @@ def do_step(thread, step_in):
 # value functions
 
 def get_locals(frame, scope=None, offset = None):
+    #if the scope is unspecified, try and get it from the frame
     if scope == None:
-      symmethod = frame.Function.GetSymbolMethod()
-      if symmethod != None:
-        for l in get_locals(frame, symmethod.RootScope): yield l
-      else:
-        for i in range(frame.GetLocalVariablesCount()):
-          yield "local_%d" % i, frame.GetLocalVariable(i)
-      
-    else:
-      for lv in scope.GetLocals():
-          v = frame.GetLocalVariable(lv.AddressField1)
-          yield lv.Name, v
-      
-      if offset == None:
-        offset = frame.GetIP()[0]
+        symmethod = frame.Function.GetSymbolMethod()
+        if symmethod != None:
+            scope = symmethod.RootScope
+        #if scope still not available, yield the local variables
+        #from the frame, with auto-gen'ed names (local_1, etc)
+        else:
+          for i in range(frame.GetLocalVariablesCount()):
+            yield "local_%d" % i, frame.GetLocalVariable(i)
+          return
 
-      for s in scope.GetChildren():
-        if s.StartOffset <= offset and s.EndOffset >= offset:
-          for ret in get_locals(frame, s, offset): yield ret
+    #if we have a scope, get the locals from the scope 
+    #and their values from the frame
+    for lv in scope.GetLocals():
+        v = frame.GetLocalVariable(lv.AddressField1)
+        yield lv.Name, v
+    
+    if offset == None: offset = frame.GetIP()[0]
+
+    #recusively call get_locals for all the child scopes
+    for s in scope.GetChildren():
+      if s.StartOffset <= offset and s.EndOffset >= offset:
+        for ret in get_locals(frame, s, offset): yield ret
           
 #--------------------------------------------
 # main IPyDebugProcess class
