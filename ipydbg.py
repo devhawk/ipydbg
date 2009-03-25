@@ -10,13 +10,11 @@ from System.IO import Path, File
 from System.Reflection import Assembly
 from System.Threading import WaitHandle, AutoResetEvent
 from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
-from System.Diagnostics.SymbolStore import ISymbolDocument, SymbolToken
+from System.Diagnostics.SymbolStore import ISymbolDocument
 
 from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType
-from Microsoft.Samples.Debugging.CorDebug.NativeApi import CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason, CorElementType
-from Microsoft.Samples.Debugging.CorMetadata import CorMetadataImport
-from Microsoft.Samples.Debugging.CorMetadata.NativeApi import IMetadataImport
-from Microsoft.Samples.Debugging.CorSymbolStore import SymbolBinder
+from Microsoft.Samples.Debugging.CorDebug.NativeApi import \
+  CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason, CorElementType
 
 import consolecolor as CC
 
