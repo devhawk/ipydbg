@@ -182,18 +182,19 @@ _generic_element_types = [ CorElementType.ELEMENT_TYPE_BOOLEAN,
      CorElementType.ELEMENT_TYPE_CHAR ]
      
 def value_to_str(value):
+    rv = value.CastToReferenceValue()
+    if rv != None:
+      if rv.IsNull: return "<None>"
+      return value_to_str(rv.Dereference())
+    bv = value.CastToBoxValue()
+    if bv != None:
+      return value_to_str(rv.GetObject())
+
     if value.Type in _generic_element_types:
       return value.CastToGenericValue().GetValue().ToString()
     elif value.Type == CorElementType.ELEMENT_TYPE_STRING:
       return value.CastToStringValue().String
     elif value.Type in [CorElementType.ELEMENT_TYPE_CLASS, CorElementType.ELEMENT_TYPE_VALUETYPE]:
-      rv = value.CastToReferenceValue()
-      if rv != None:
-        if rv.IsNull: return "<None>"
-        return value_to_str(rv.Dereference())
-      bv = value.CastToBoxValue()
-      if bv != None:
-        return value_to_str(rv.GetObject())
       return value.ExactType.Class.GetTypeInfo().FullName
     else:
       return "<printing value of type: %s not implemented>" % str(value.Type)
