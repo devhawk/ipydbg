@@ -144,7 +144,7 @@ def do_step(thread, step_in):
 #--------------------------------------------
 # value functions
 
-def get_locals(frame, scope=None, offset = None):
+def get_locals(frame, scope=None, offset = None, show_hidden_locals = False):
     #if the scope is unspecified, try and get it from the frame
     if scope == None:
         symmethod = frame.Function.GetSymbolMethod()
@@ -160,15 +160,16 @@ def get_locals(frame, scope=None, offset = None):
     #if we have a scope, get the locals from the scope 
     #and their values from the frame
     for lv in scope.GetLocals():
-        v = frame.GetLocalVariable(lv.AddressField1)
-        yield lv.Name, v
+        if not lv.Name.startswith("$") or show_hidden_locals:
+          v = frame.GetLocalVariable(lv.AddressField1)
+          yield lv.Name, v
     
     if offset == None: offset = frame.GetIP()[0]
 
     #recusively call get_locals for all the child scopes
     for s in scope.GetChildren():
       if s.StartOffset <= offset and s.EndOffset >= offset:
-        for ret in get_locals(frame, s, offset): yield ret
+        for ret in get_locals(frame, s, offset, show_hidden_locals): yield ret
 
 _generic_element_types = [ CorElementType.ELEMENT_TYPE_BOOLEAN,
      CorElementType.ELEMENT_TYPE_I1, CorElementType.ELEMENT_TYPE_U1,
@@ -205,11 +206,10 @@ def value_to_str(value):
     elif value.Type in [CorElementType.ELEMENT_TYPE_CLASS, CorElementType.ELEMENT_TYPE_VALUETYPE]:
       ti = value.CastToObjectValue().ExactType.Class.GetTypeInfo()
       return ti.FullName
-      
     elif value.Type == CorElementType.ELEMENT_TYPE_STRING:
       return value.CastToStringValue().String
     else:
-      return str(value.Type)
+      return "<printing value of type: %s not implemented>" % str(value.Type)
   
 #--------------------------------------------
 # main IPyDebugProcess class
@@ -294,7 +294,8 @@ class IPyDebugProcess(object):
                 return
             elif k.Key == ConsoleKey.L:
                 print "\nLocals"
-                locals = list(get_locals(self.active_thread.ActiveFrame))
+                show_hidden = (k.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
+                locals = list(get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden))
                 max_local_name_len = 0
                 for l in locals:
                     max_local_name_len = max(max_local_name_len, len(l[0]))
