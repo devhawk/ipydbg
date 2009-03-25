@@ -283,7 +283,9 @@ class IPyDebugProcess(object):
                 print "\nLocals"
                 show_hidden = (k.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
                 locals = get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden)
+                count = 0
                 for name,value in ((name, extract_value(value)) for name, value in locals):
+                  count = count + 1
                   with CC.Magenta: print "  ", name, 
 
                   if type(value) == CorObjectValue:
@@ -298,7 +300,9 @@ class IPyDebugProcess(object):
                   else:
                     print value,
                     with CC.Green: print value.GetType().FullName
-                
+                else:
+                  if count == 0:
+                    with CC.Magenta: print "  No Locals Found" 
             elif k.Key == ConsoleKey.T:
                 print "\nStack Trace"
                 get_frames = get_dynamic_frames(self.active_thread.ActiveChain) \
