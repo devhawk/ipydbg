@@ -158,10 +158,13 @@ def get_locals(frame, scope=None, offset = None, show_hidden_locals = False):
     #if we have a scope, get the locals from the scope 
     #and their values from the frame
     for lv in scope.GetLocals():
+        #always skip $site locals - they are cached callsites and 
+        #not relevant to the ironpython developer
+        if lv.Name == "$site": continue
         if not lv.Name.startswith("$") or show_hidden_locals:
           v = frame.GetLocalVariable(lv.AddressField1)
           yield lv.Name, v
-    
+
     if offset == None: offset = frame.GetIP()[0]
 
     #recusively call get_locals for all the child scopes
