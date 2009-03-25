@@ -12,9 +12,10 @@ from System.Threading import WaitHandle, AutoResetEvent
 from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 from System.Diagnostics.SymbolStore import ISymbolDocument
 
-from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType
+from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType, CorValue, CorReferenceValue
 from Microsoft.Samples.Debugging.CorDebug.NativeApi import \
-  CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason, CorElementType
+  CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason
+from Microsoft.Samples.Debugging.CorDebug.NativeApi.CorElementType import *
 
 import consolecolor as CC
 
@@ -172,32 +173,32 @@ def get_locals(frame, scope=None, offset = None, show_hidden_locals = False):
       if s.StartOffset <= offset and s.EndOffset >= offset:
         for ret in get_locals(frame, s, offset, show_hidden_locals): yield ret
 
-_generic_element_types = [ CorElementType.ELEMENT_TYPE_BOOLEAN,
-     CorElementType.ELEMENT_TYPE_I1, CorElementType.ELEMENT_TYPE_U1,
-     CorElementType.ELEMENT_TYPE_I2, CorElementType.ELEMENT_TYPE_U2,
-     CorElementType.ELEMENT_TYPE_I4, CorElementType.ELEMENT_TYPE_U4,
-     CorElementType.ELEMENT_TYPE_I, CorElementType.ELEMENT_TYPE_U,                  
-     CorElementType.ELEMENT_TYPE_I8, CorElementType.ELEMENT_TYPE_U8,
-     CorElementType.ELEMENT_TYPE_R4, CorElementType.ELEMENT_TYPE_R8,
-     CorElementType.ELEMENT_TYPE_CHAR ]
+_generic_element_types = [ ELEMENT_TYPE_BOOLEAN,
+     ELEMENT_TYPE_I1, ELEMENT_TYPE_U1,
+     ELEMENT_TYPE_I2, ELEMENT_TYPE_U2,
+     ELEMENT_TYPE_I4, ELEMENT_TYPE_U4,
+     ELEMENT_TYPE_I, ELEMENT_TYPE_U,                  
+     ELEMENT_TYPE_I8, ELEMENT_TYPE_U8,
+     ELEMENT_TYPE_R4, ELEMENT_TYPE_R8,
+     ELEMENT_TYPE_CHAR ]
      
-def value_to_str(value):
+def extract_value(value):
     rv = value.CastToReferenceValue()
     if rv != None:
-      if rv.IsNull: return "<None>"
-      return value_to_str(rv.Dereference())
+      if rv.IsNull: return rv
+      return extract_value(rv.Dereference())
     bv = value.CastToBoxValue()
     if bv != None:
-      return value_to_str(rv.GetObject())
+      return extract_value(rv.GetObject())
 
     if value.Type in _generic_element_types:
-      return value.CastToGenericValue().GetValue().ToString()
-    elif value.Type == CorElementType.ELEMENT_TYPE_STRING:
+      return value.CastToGenericValue().GetValue()
+    elif value.Type == ELEMENT_TYPE_STRING:
       return value.CastToStringValue().String
-    elif value.Type in [CorElementType.ELEMENT_TYPE_CLASS, CorElementType.ELEMENT_TYPE_VALUETYPE]:
-      return value.ExactType.Class.GetTypeInfo().FullName
+    elif value.Type in [ELEMENT_TYPE_CLASS, ELEMENT_TYPE_VALUETYPE, ELEMENT_TYPE_OBJECT]:
+      return value
     else:
-      return "<printing value of type: %s not implemented>" % str(value.Type)
+      raise "<processing CorValue of type: %s not implemented>" % str(value.Type)
   
 #--------------------------------------------
 # main IPyDebugProcess class
@@ -260,8 +261,6 @@ class IPyDebugProcess(object):
         if sp.start_line == sp.end_line == i and sp.start_col == sp.end_col:
           with CC.Yellow: Console.Write(" ^^^")
         Console.WriteLine()
-
-
         
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
@@ -283,14 +282,15 @@ class IPyDebugProcess(object):
             elif k.Key == ConsoleKey.L:
                 print "\nLocals"
                 show_hidden = (k.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
-                locals = list(get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden))
-                max_local_name_len = 0
-                for l in locals:
-                    max_local_name_len = max(max_local_name_len, len(l[0]))
-                local_fmt = "  %%-%ds %%s" % max_local_name_len
-                
-                for local_name,local_val in locals:
-                  print local_fmt % (local_name, value_to_str(local_val))
+                locals = get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden)
+                for name,value in ((name, extract_value(value)) for name, value in locals):
+                  with CC.Magenta: print "  ", name, 
+                  if type(value) in [CorValue, CorReferenceValue]:
+                    print None if hasattr(value, "IsNull") and value.IsNull else "<CorValue>",
+                    with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
+                  else:
+                    print value,
+                    with CC.Green: print value.GetType().FullName
                 
             elif k.Key == ConsoleKey.T:
                 print "\nStack Trace"
