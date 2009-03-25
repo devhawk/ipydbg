@@ -12,7 +12,7 @@ from System.Threading import WaitHandle, AutoResetEvent
 from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 from System.Diagnostics.SymbolStore import ISymbolDocument
 
-from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType, CorValue, CorReferenceValue
+from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType, CorValue, CorReferenceValue, CorObjectValue
 from Microsoft.Samples.Debugging.CorDebug.NativeApi import \
   CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason
 from Microsoft.Samples.Debugging.CorDebug.NativeApi.CorElementType import *
@@ -189,14 +189,14 @@ def extract_value(value):
       return extract_value(rv.Dereference())
     bv = value.CastToBoxValue()
     if bv != None:
-      return extract_value(rv.GetObject())
+      return extract_value(bv.GetObject())
 
     if value.Type in _generic_element_types:
       return value.CastToGenericValue().GetValue()
     elif value.Type == ELEMENT_TYPE_STRING:
       return value.CastToStringValue().String
     elif value.Type in [ELEMENT_TYPE_CLASS, ELEMENT_TYPE_VALUETYPE, ELEMENT_TYPE_OBJECT]:
-      return value
+      return value.CastToObjectValue()
     else:
       raise "<processing CorValue of type: %s not implemented>" % str(value.Type)
   
@@ -285,8 +285,15 @@ class IPyDebugProcess(object):
                 locals = get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden)
                 for name,value in ((name, extract_value(value)) for name, value in locals):
                   with CC.Magenta: print "  ", name, 
-                  if type(value) in [CorValue, CorReferenceValue]:
-                    print None if hasattr(value, "IsNull") and value.IsNull else "<CorValue>",
+
+                  if type(value) == CorObjectValue:
+                    print "<CorObjectValue>",
+                    with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
+                  elif type(value) == CorValue:
+                    print "<CorValue>",
+                    with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
+                  elif type(value) == CorReferenceValue:
+                    print None if value.IsNull else "<CorReferenceValue>",
                     with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
                   else:
                     print value,
