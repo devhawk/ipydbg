@@ -12,7 +12,8 @@ from System.Threading import WaitHandle, AutoResetEvent
 from System.Threading import Thread, ApartmentState, ParameterizedThreadStart
 from System.Diagnostics.SymbolStore import ISymbolDocument
 
-from Microsoft.Samples.Debugging.CorDebug import CorDebugger, CorFrameType, CorValue, CorReferenceValue, CorObjectValue
+from Microsoft.Samples.Debugging.CorDebug import (CorDebugger, CorFrameType, 
+  CorValue, CorReferenceValue, CorObjectValue, CorAppDomain, CorModule)
 from Microsoft.Samples.Debugging.CorDebug.NativeApi import \
   CorDebugUnmappedStop, COR_DEBUG_STEP_RANGE, CorDebugStepReason
 from Microsoft.Samples.Debugging.CorDebug.NativeApi.CorElementType import *
@@ -56,20 +57,25 @@ def get_sequence_points(symmethod, include_hidden_lines = False):
 #--------------------------------------------
 # breakpoint funcitons
 
-def create_breakpoint(doc, line, module):
-  line = doc.FindClosestLine(line)
-  method = module.SymbolReader.GetMethodFromDocumentPosition(doc, line, 0)
-  function = module.GetFunctionFromToken(method.Token.GetToken())
-  
-  for sp in get_sequence_points(method):
-    if sp.doc.URL == doc.URL and sp.start_line == line:
-      bp = function.ILCode.CreateBreakpoint(sp.offset)
-      bp.Activate(True)
-      return bp
-      
-  bp = function.CreateBreakpoint()
-  bp.Activate(True)
-  return bp
+def create_breakpoint(module, filename, linenum):
+    reader = module.SymbolReader
+    if reader == None:
+      raise Exception, "Module %s SymbolReader is null" % module.Name
+    
+    # currently, I'm only comparing filenames. This algorithm may need to get more
+    # sophisticated to support differntiating files with the same name in different paths
+    filename = Path.GetFileName(filename)
+    for doc in reader.GetDocuments():
+      if str.Compare(filename, Path.GetFileName(doc.URL), True) == 0:
+        linenum = doc.FindClosestLine(linenum)
+        method = module.SymbolReader.GetMethodFromDocumentPosition(doc, linenum, 0)
+        function = module.GetFunctionFromToken(method.Token.GetToken())
+        
+        for sp in get_sequence_points(method):
+          if sp.doc.URL == doc.URL and sp.start_line == linenum:
+            return function.ILCode.CreateBreakpoint(sp.offset)
+        
+        return function.CreateBreakpoint()
 
 #--------------------------------------------
 # frame functions
@@ -495,15 +501,10 @@ class IPyDebugProcess(object):
           print "OnUpdateModuleSymbols", e.Module.Name
 
         e.Module.UpdateSymbolReaderFromStream(e.Stream)
-        if self.initial_breakpoint != None:
-            return
-
-        full_path = Path.GetFullPath(self.py_file)
-        for doc in e.Module.SymbolReader.GetDocuments():
-            if str.IsNullOrEmpty(doc.URL):
-                continue
-            if str.Compare(full_path, Path.GetFullPath(doc.URL), True) == 0:
-                self.initial_breakpoint = create_breakpoint(doc, 1, e.Module)
+        if self.initial_breakpoint == None:
+            self.initial_breakpoint = create_breakpoint(e.Module, self.py_file, 1)
+            if self.initial_breakpoint != None:
+              self.initial_breakpoint.Activate(True)
 
     def OnBreakpoint(self, sender,e):
         method_info =  e.Thread.ActiveFrame.Function.GetMethodInfo()
