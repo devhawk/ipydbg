@@ -311,6 +311,7 @@ class IPyDebugProcess(object):
         Console.WriteLine()
 
     _inputcmds = dict()
+    _breakpointcmds = dict()
     
     @inputcmd(_inputcmds, ConsoleKey.R)
     def _input_repl_cmd(self, keyinfo):
@@ -407,32 +408,22 @@ class IPyDebugProcess(object):
       stepper.StepOut()
       return True
       
+    @inputcmd(_breakpointcmds, ConsoleKey.L)
+    def _bp_list(self, keyinfo):
+      print "\nList Breakpoints"   
+      for bp in self.active_appdomain.Breakpoints: 
+        sp = get_location(bp.Function, bp.Offset)
+        print "  %s:%d" % (sp.doc.URL, sp.start_line)
+      return False
+      
     @inputcmd(_inputcmds, ConsoleKey.B)
-    def _breakpoint_mgmt(self, keyinfo):
-        with CC.Cyan:
-          print "\nBreakpoint Management"
-          while True:
-              print "BP» ",
-              k = Console.ReadKey()
-              
-              if k.Key == ConsoleKey.L:
-                print "\nList Breakpoints"   
-                for bp in self.active_appdomain.Breakpoints: 
-                  sp = get_location(bp.Function, bp.Offset)
-                  print "  %s:%d" % (sp.doc.URL, sp.start_line)
-              elif k.Key == ConsoleKey.D:
-                print "\nDelete Breakpoint Not Implemented"           
-              elif k.Key == ConsoleKey.A:
-                print "\nAdd Breakpoint Not Implemented"           
-                '''Console.Write(' ')
-                set_bp = Console.ReadLine().split(":")
-                for doc in self._get_symbol_docs():
-                   if '''
-              elif k.Key == ConsoleKey.Q:
-                  print "\nExiting BP Management"           
-                  break
-              else:
-                  print "\nPlease enter a valid command"
+    def _input_breakpoint(self, keyinfo):
+        keyinfo2 = Console.ReadKey()
+        if keyinfo2.Key in IPyDebugProcess._breakpointcmds:
+            return IPyDebugProcess._breakpointcmds[keyinfo2.Key](self, keyinfo2)
+        else:
+            print "\nInvalid breakpoint command", str(keyinfo2.Key)
+            return False
             
     def _get_symbol_docs(self):
         for a in self.active_appdomain.Assemblies:
