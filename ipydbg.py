@@ -60,7 +60,7 @@ def get_sequence_points(symmethod, include_hidden_lines = False):
 def create_breakpoint(module, filename, linenum):
     reader = module.SymbolReader
     if reader == None:
-      raise Exception, "Module %s SymbolReader is null" % module.Name
+      return None
     
     # currently, I'm only comparing filenames. This algorithm may need to get more
     # sophisticated to support differntiating files with the same name in different paths
@@ -414,6 +414,26 @@ class IPyDebugProcess(object):
       stepper.StepOut()
       return True
       
+    @inputcmd(_breakpointcmds, ConsoleKey.A)
+    def _bp_add(self, keyinfo):
+      try:
+        args = Console.ReadLine().Trim().split(':')
+        if len(args) != 2: raise Exception, "Only pass two arguments" 
+        linenum = int(args[1])
+        
+        for assm in self.active_appdomain.Assemblies:
+          for mod in assm.Modules:
+              bp = create_breakpoint(mod, args[0], linenum)
+              if bp != None:
+                bp.Activate(True)
+                Console.WriteLine( "Breakpoint set")
+                return False
+        raise Exception, "Couldn't find %s:%d" % (args[0], linenum)    
+
+      except Exception, msg:
+        with CC.Red:
+          print "Add breakpoint failed", msg
+
     @inputcmd(_breakpointcmds, ConsoleKey.L)
     def _bp_list(self, keyinfo):
       print "\nList Breakpoints"   
