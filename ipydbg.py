@@ -202,7 +202,13 @@ def extract_value(value):
   
 #--------------------------------------------
 # main IPyDebugProcess class
-  
+
+def inputcmd(cmddict, key):
+  def deco(f):
+    cmddict[key] = f
+    return f
+  return deco
+   
 class IPyDebugProcess(object):
     def __init__(self, debugger=None):
         self.debugger = debugger if debugger != None \
@@ -261,72 +267,92 @@ class IPyDebugProcess(object):
         if sp.start_line == sp.end_line == i and sp.start_col == sp.end_col:
           with CC.Yellow: Console.Write(" ^^^")
         Console.WriteLine()
-        
+
+    _inputcmds = dict()
+    
+    @inputcmd(_inputcmds, ConsoleKey.Spacebar)
+    def _input_continue_cmd(self, keyinfo):
+      print "\nContinuing"
+      return True
+
+    @inputcmd(_inputcmds, ConsoleKey.Q)
+    def _input_quit_cmd(self, keyinfo):
+      print "\nQuitting"
+      self.process.Stop(0)
+      self.process.Terminate(255)
+      return True
+     
+    @inputcmd(_inputcmds, ConsoleKey.L)
+    def _input_locals_cmd(self, keyinfo):
+      print "\nLocals"
+      show_hidden = (keyinfo.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
+      locals = get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden)
+      count = 0
+      for name,value in ((name, extract_value(value)) for name, value in locals):
+        count = count + 1
+        with CC.Magenta: print "  ", name, 
+
+        if type(value) == CorObjectValue:
+          print "<CorObjectValue>",
+          with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
+        elif type(value) == CorValue:
+          print "<CorValue>",
+          with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
+        elif type(value) == CorReferenceValue:
+          print None if value.IsNull else "<CorReferenceValue>",
+          with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
+        else:
+          print value,
+          with CC.Green: print value.GetType().FullName
+      else:
+        if count == 0:
+          with CC.Magenta: print "  No Locals Found" 
+      return False
+
+    @inputcmd(_inputcmds, ConsoleKey.T)
+    def _input_stack_trace_cmd(self, keyinfo):
+      print "\nStack Trace"
+      get_frames = get_dynamic_frames(self.active_thread.ActiveChain) \
+          if (keyinfo.Modifiers & ConsoleModifiers.Alt) != ConsoleModifiers.Alt \
+          else self.active_thread.ActiveChain.Frames
+      for f in get_frames:
+          offset, sp = get_frame_location(f)
+          method_info = f.GetMethodInfo()
+          print "  ",
+          if method_info != None:
+            print "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name),
+          print sp if sp != None else "(offset %d)" % offset, f.FrameType
+      return False
+      
+    @inputcmd(_inputcmds, ConsoleKey.S)
+    def _input_step_over_cmd(self, keyinfo):
+      print "\nStepping"
+      do_step(self.active_thread, False)
+      return True
+      
+    @inputcmd(_inputcmds, ConsoleKey.I)
+    def _input_step_in_cmd(self, keyinfo):
+      print "\nStepping In"
+      do_step(self.active_thread, True)
+      return True
+      
+    @inputcmd(_inputcmds, ConsoleKey.O)
+    def _input_step_out_cmd(self, keyinfo):
+      print "\nStepping Out"
+      stepper = create_stepper(self.active_thread)
+      stepper.StepOut()
+      return True
+      
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
         self._print_source_line(sp, lines)
+
         while True:
-            
-            print "» ",
-            k = Console.ReadKey()
-
-            if k.Key == ConsoleKey.Spacebar:
-                print "\nContinuing"
-                return
-            elif k.Key == ConsoleKey.Q:
-                print "\nQuitting"
-                self.process.Stop(0)
-                self.process.Terminate(255)
-                return
-            elif k.Key == ConsoleKey.L:
-                print "\nLocals"
-                show_hidden = (k.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
-                locals = get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden)
-                count = 0
-                for name,value in ((name, extract_value(value)) for name, value in locals):
-                  count = count + 1
-                  with CC.Magenta: print "  ", name, 
-
-                  if type(value) == CorObjectValue:
-                    print "<CorObjectValue>",
-                    with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
-                  elif type(value) == CorValue:
-                    print "<CorValue>",
-                    with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
-                  elif type(value) == CorReferenceValue:
-                    print None if value.IsNull else "<CorReferenceValue>",
-                    with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
-                  else:
-                    print value,
-                    with CC.Green: print value.GetType().FullName
-                else:
-                  if count == 0:
-                    with CC.Magenta: print "  No Locals Found" 
-            elif k.Key == ConsoleKey.T:
-                print "\nStack Trace"
-                get_frames = get_dynamic_frames(self.active_thread.ActiveChain) \
-                    if (k.Modifiers & ConsoleModifiers.Alt) != ConsoleModifiers.Alt \
-                    else self.active_thread.ActiveChain.Frames
-                for f in get_frames:
-                    offset, sp = get_frame_location(f)
-                    method_info = f.GetMethodInfo()
-                    print "  ",
-                    if method_info != None:
-                      print "%s::%s --" % (method_info.DeclaringType.Name, method_info.Name),
-                    print sp if sp != None else "(offset %d)" % offset, f.FrameType
-            elif k.Key == ConsoleKey.S:
-                print "\nStepping"
-                do_step(self.active_thread, False)
-                return
-            elif k.Key == ConsoleKey.I:
-                print "\nStepping In"
-                do_step(self.active_thread, True)
-                return                
-            elif k.Key == ConsoleKey.O:
-                print "\nStepping Out"
-                stepper = create_stepper(self.active_thread)
-                stepper.StepOut()
+            print "ipydbg» ",
+            keyinfo = Console.ReadKey()
+            if keyinfo.Key in IPyDebugProcess._inputcmds:
+              if IPyDebugProcess._inputcmds[keyinfo.Key](self, keyinfo):
                 return
             else:
                 print "\nPlease enter a valid command"
