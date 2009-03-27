@@ -451,13 +451,6 @@ class IPyDebugProcess(object):
             print "\nInvalid breakpoint command", str(keyinfo2.Key)
             return False
             
-    def _get_symbol_docs(self):
-        for a in self.active_appdomain.Assemblies:
-            for m in a.Modules:
-                if m.IsDynamic and m.SymbolReader != None:
-                    for d in m.SymbolReader.GetDocuments():
-                        yield d
-               
     def _input(self):
         offset, sp = get_frame_location(self.active_thread.ActiveFrame)
         lines = self._get_file(sp.doc.URL)
