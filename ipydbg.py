@@ -315,6 +315,7 @@ class IPyDebugProcess(object):
     @inputcmd(_inputcmds, ConsoleKey.R)
     def _input_repl_cmd(self, keyinfo):
       print 
+      repl_locals = {'self': self}
       with CC.ConsoleColorMgr(ConsoleColor.DarkBlue, ConsoleColor.White):
         print "REPL Console"
         cmd = ""
@@ -327,7 +328,7 @@ class IPyDebugProcess(object):
             else:
               code = compile(cmd, "<input>", "single")
               print "Executing:"+ cmd
-              exec code in globals(), {'self': self}
+              exec code in globals(), repl_locals 
               cmd = ""
           else:
             cmd = cmd + line 
