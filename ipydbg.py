@@ -312,6 +312,27 @@ class IPyDebugProcess(object):
 
     _inputcmds = dict()
     
+    @inputcmd(_inputcmds, ConsoleKey.D)
+    def _input_debug_cmd(self, keyinfo):
+      print 
+      with CC.ConsoleColorMgr(ConsoleColor.DarkBlue, ConsoleColor.White):
+        print "Debug Mode"
+        cmd = ""
+        while True:
+          Console.Write(">>>")
+          line = Console.ReadLine()
+          if str.IsNullOrEmpty(line):
+            if str.IsNullOrEmpty(cmd):
+              break
+            else:
+              code = compile(cmd, "<input>", "single")
+              print "Executing:"+ cmd
+              exec code in globals(), {'self': self}
+              cmd = ""
+          else:
+            cmd = cmd + line 
+            if cmd != line: cmd = cmd + "\n"
+            
     @inputcmd(_inputcmds, ConsoleKey.Spacebar)
     def _input_continue_cmd(self, keyinfo):
       print "\nContinuing"
