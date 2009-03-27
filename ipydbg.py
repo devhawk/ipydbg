@@ -443,6 +443,24 @@ class IPyDebugProcess(object):
         print "  %d. %s:%d %s" % (i+1, sp.doc.URL, sp.start_line, state)
       return False
       
+    @inputcmd(_breakpointcmds, ConsoleKey.X)
+    def _bp_delete(self, keyinfo):
+      try:
+        bp_num = int(Console.ReadLine())
+        for i, bp in enumerate(self.active_appdomain.Breakpoints): 
+          if i+1 == bp_num:
+            #CorAppDomain.Breakpoints only iterates over *Active* breakpoints
+            #to support Active and Deactive BPs, I'll need to keep my own list
+            #for now, treat BP deactivate as BP Delete
+            bp.Activate(False)
+            print "\nBreakpoint %d Deleted" % bp_num
+            return False
+        raise Exception, "Breakpoint %d not found" % bp_num
+        
+      except Exception, msg:
+        with CC.Red: print "Delete breakpoint Failed", msg
+      return False      
+      
     @inputcmd(_inputcmds, ConsoleKey.B)
     def _input_breakpoint(self, keyinfo):
         keyinfo2 = Console.ReadKey()
