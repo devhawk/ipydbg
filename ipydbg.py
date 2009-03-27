@@ -317,11 +317,11 @@ class IPyDebugProcess(object):
 
       print 
       repl_locals = {'self': self}
-      with CC.ConsoleColorMgr(ConsoleColor.DarkBlue, ConsoleColor.White):
+      with CC.Gray:
         print "REPL Console"
         cmd = ""
         while True:
-          Console.Write(">>>" if not cmd else "...")
+          Console.Write("REPL>>>" if not cmd else "...")
           
           line = Console.ReadLine()
           if not line and not cmd:
