@@ -312,11 +312,11 @@ class IPyDebugProcess(object):
 
     _inputcmds = dict()
     
-    @inputcmd(_inputcmds, ConsoleKey.D)
-    def _input_debug_cmd(self, keyinfo):
+    @inputcmd(_inputcmds, ConsoleKey.R)
+    def _input_repl_cmd(self, keyinfo):
       print 
       with CC.ConsoleColorMgr(ConsoleColor.DarkBlue, ConsoleColor.White):
-        print "Debug Mode"
+        print "REPL Console"
         cmd = ""
         while True:
           Console.Write(">>>")
