@@ -437,9 +437,10 @@ class IPyDebugProcess(object):
     @inputcmd(_breakpointcmds, ConsoleKey.L)
     def _bp_list(self, keyinfo):
       print "\nList Breakpoints"   
-      for bp in self.active_appdomain.Breakpoints: 
+      for i, bp in enumerate(self.active_appdomain.Breakpoints): 
         sp = get_location(bp.Function, bp.Offset)
-        print "  %s:%d" % (sp.doc.URL, sp.start_line)
+        state = "Active" if bp.IsActive else "Inactive"
+        print "  %d. %s:%d %s" % (i+1, sp.doc.URL, sp.start_line, state)
       return False
       
     @inputcmd(_inputcmds, ConsoleKey.B)
