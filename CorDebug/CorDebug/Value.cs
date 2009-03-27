@@ -94,12 +94,18 @@ namespace Microsoft.Samples.Debugging.CorDebug
 
         public CorStringValue CastToStringValue()
         {
-            return new CorStringValue((ICorDebugStringValue)m_val);
+            if (m_val is ICorDebugStringValue)
+                return new CorStringValue((ICorDebugStringValue)m_val);
+            else
+                return null;
         }
 
         public CorObjectValue CastToObjectValue()
         {
-            return new CorObjectValue((ICorDebugObjectValue)m_val);
+            if (m_val is ICorDebugObjectValue)
+                return new CorObjectValue((ICorDebugObjectValue)m_val);
+            else
+                return null;
         }
 
         public CorGenericValue CastToGenericValue()
