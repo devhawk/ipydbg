@@ -314,10 +314,7 @@ class IPyDebugProcess(object):
     
     @inputcmd(_inputcmds, ConsoleKey.R)
     def _input_repl_cmd(self, keyinfo):
-      # I'd really like to replace some of this code with code.interact, but 
-      # code.interact doesn't work currently because Ctl-Z doesn't throw an 
-      # EOFError in raw_input like CPy does
-      from codeop import compile_command
+
       print 
       repl_locals = {'self': self}
       with CC.ConsoleColorMgr(ConsoleColor.DarkBlue, ConsoleColor.White):
@@ -331,13 +328,15 @@ class IPyDebugProcess(object):
             break
           
           try:
-            cmd = cmd + line + "\n"
-            code = compile_command(cmd)
-            if code != None:
-              exec code in globals(), repl_locals
-              cmd = ""
+            if line:
+              cmd = cmd + line + "\n"
+            else:
+              code = compile(cmd, "<input>", "single")
+              if code != None:
+                exec code in globals(), repl_locals
+                cmd = ""
           except Exception, ex:
-            with CC.Red: print ex
+            with CC.Red: print type(ex), ex
             cmd = ""
             
     @inputcmd(_inputcmds, ConsoleKey.Spacebar)
