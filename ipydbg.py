@@ -333,19 +333,18 @@ class IPyDebugProcess(object):
         print display,
         with CC.Green: print type_name
         
+      def print_all_values(f, show_hidden):
+          count = 0
+          for name,value in f(self.active_thread.ActiveFrame, show_hidden = show_hidden):
+            print_value(name, value)
+            count+=1        
+          return count
+          
       print "\nLocals"
       show_hidden = (keyinfo.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
-      locals = get_locals(self.active_thread.ActiveFrame, show_hidden = show_hidden)
-      args = get_arguments(self.active_thread.ActiveFrame, show_hidden = show_hidden)
-      
-      count = 0
-      for name,value in locals:
-        print_value(name, value)
-        count+=1
-      for name,value in args:
-        print_value(name, value)
-        count+=1
-      
+      count = print_all_values(get_locals, show_hidden)
+      count += print_all_values(get_arguments, show_hidden)
+
       if count == 0:
           with CC.Magenta: print "  No Locals Found" 
 
