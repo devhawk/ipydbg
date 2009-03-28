@@ -143,7 +143,7 @@ def do_step(thread, step_in):
 #--------------------------------------------
 # value functions
 
-def get_locals(frame, show_hidden = False, scope=None, offset = None):
+def get_locals(frame, scope=None, offset = None):
     #if the scope is unspecified, try and get it from the frame
     if scope == None:
         symmethod = frame.Function.GetSymbolMethod()
@@ -161,25 +161,24 @@ def get_locals(frame, show_hidden = False, scope=None, offset = None):
     for lv in scope.GetLocals():
         #always skip $site locals - they are cached callsites and 
         #not relevant to the ironpython developer
-        if lv.Name == "$site": continue
-        if not lv.Name.startswith("$") or show_hidden:
-          v = frame.GetLocalVariable(lv.AddressField1)
-          yield lv.Name, v
+        if lv.Name == "$site": 
+          continue
+        v = frame.GetLocalVariable(lv.AddressField1)
+        yield lv.Name, v
 
     if offset == None: offset = frame.GetIP()[0]
 
     #recusively call get_locals for all the child scopes
     for s in scope.GetChildren():
       if s.StartOffset <= offset and s.EndOffset >= offset:
-        for ret in get_locals(frame, show_hidden, s, offset): yield ret
+        for ret in get_locals(frame, s, offset): yield ret
 
-def get_arguments(frame, show_hidden = False):
+def get_arguments(frame):
     mi = frame.GetMethodInfo()
     for pi in mi.GetParameters():
       if pi.Position == 0: continue
-      if not pi.Name.startswith("$") or show_hidden:
-        arg = frame.GetArgument(pi.Position - 1)
-        yield pi.Name, arg
+      arg = frame.GetArgument(pi.Position - 1)
+      yield pi.Name, arg
 
 
 _type_map = { 
@@ -335,7 +334,9 @@ class IPyDebugProcess(object):
         
       def print_all_values(f, show_hidden):
           count = 0
-          for name,value in f(self.active_thread.ActiveFrame, show_hidden = show_hidden):
+          for name,value in f(self.active_thread.ActiveFrame):
+            if name.startswith("$") and not show_hidden:
+              continue
             print_value(name, value)
             count+=1        
           return count
