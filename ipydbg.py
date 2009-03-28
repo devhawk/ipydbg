@@ -330,8 +330,15 @@ class IPyDebugProcess(object):
       print "\nLocals"
       show_hidden = (keyinfo.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
       locals = get_locals(self.active_thread.ActiveFrame, show_hidden)
+      args = get_arguments(self.active_thread.ActiveFrame, show_hidden)
       count = 0
       for name,value in ((name, extract_value(value)) for name, value in locals):
+        display, type_name = display_value(value)
+        with CC.Magenta: print "  ", name, 
+        print display,
+        with CC.Green: print type_name
+        count+=1
+      for name,value in ((name, extract_value(value)) for name, value in args):
         display, type_name = display_value(value)
         with CC.Magenta: print "  ", name, 
         print display,
