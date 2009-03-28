@@ -173,6 +173,15 @@ def get_locals(frame, show_hidden = False, scope=None, offset = None):
       if s.StartOffset <= offset and s.EndOffset >= offset:
         for ret in get_locals(frame, show_hidden, s, offset): yield ret
 
+def get_arguments(frame, show_hidden = False):
+    mi = frame.GetMethodInfo()
+    for pi in mi.GetParameters():
+      if pi.Position == 0: continue
+      if not pi.Name.startswith("$") or show_hidden:
+        arg = frame.GetArgument(pi.Position - 1)
+        yield pi.Name, arg
+
+
 _type_map = { 
   'System.Boolean': ELEMENT_TYPE_BOOLEAN,
   'System.SByte'  : ELEMENT_TYPE_I1, 
