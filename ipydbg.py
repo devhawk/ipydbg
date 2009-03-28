@@ -143,7 +143,7 @@ def do_step(thread, step_in):
 #--------------------------------------------
 # value functions
 
-def get_locals(frame, scope=None, offset = None, show_hidden_locals = False):
+def get_locals(frame, show_hidden = False, scope=None, offset = None):
     #if the scope is unspecified, try and get it from the frame
     if scope == None:
         symmethod = frame.Function.GetSymbolMethod()
@@ -162,7 +162,7 @@ def get_locals(frame, scope=None, offset = None, show_hidden_locals = False):
         #always skip $site locals - they are cached callsites and 
         #not relevant to the ironpython developer
         if lv.Name == "$site": continue
-        if not lv.Name.startswith("$") or show_hidden_locals:
+        if not lv.Name.startswith("$") or show_hidden:
           v = frame.GetLocalVariable(lv.AddressField1)
           yield lv.Name, v
 
@@ -171,7 +171,7 @@ def get_locals(frame, scope=None, offset = None, show_hidden_locals = False):
     #recusively call get_locals for all the child scopes
     for s in scope.GetChildren():
       if s.StartOffset <= offset and s.EndOffset >= offset:
-        for ret in get_locals(frame, s, offset, show_hidden_locals): yield ret
+        for ret in get_locals(frame, show_hidden, s, offset): yield ret
 
 _type_map = { 
   'System.Boolean': ELEMENT_TYPE_BOOLEAN,
@@ -320,7 +320,7 @@ class IPyDebugProcess(object):
     def _input_locals_cmd(self, keyinfo):
       print "\nLocals"
       show_hidden = (keyinfo.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
-      locals = get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden)
+      locals = get_locals(self.active_thread.ActiveFrame, show_hidden)
       count = 0
       for name,value in ((name, extract_value(value)) for name, value in locals):
         display, type_name = display_value(value)
