@@ -289,7 +289,7 @@ namespace Microsoft.Samples.Debugging.CorMetadata
 
         protected override bool HasElementTypeImpl()
         {
-            throw new NotImplementedException();
+            return false;
         }
 
         public override Type GetElementType()
