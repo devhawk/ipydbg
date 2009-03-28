@@ -280,6 +280,7 @@ class IPyDebugProcess(object):
         self.break_event = AutoResetEvent(False)
 
         self.initial_breakpoint = None
+        self.breakpoints = []
         self.source_files = dict()
 
         handles = Array.CreateInstance(WaitHandle, 2)
@@ -425,6 +426,7 @@ class IPyDebugProcess(object):
           for mod in assm.Modules:
               bp = create_breakpoint(mod, args[0], linenum)
               if bp != None:
+                self.breakpoints.append(bp)
                 bp.Activate(True)
                 Console.WriteLine( "Breakpoint set")
                 return False
@@ -437,28 +439,40 @@ class IPyDebugProcess(object):
     @inputcmd(_breakpointcmds, ConsoleKey.L)
     def _bp_list(self, keyinfo):
       print "\nList Breakpoints"   
-      for i, bp in enumerate(self.active_appdomain.Breakpoints): 
+      for i, bp in enumerate(self.breakpoints): 
         sp = get_location(bp.Function, bp.Offset)
         state = "Active" if bp.IsActive else "Inactive"
         print "  %d. %s:%d %s" % (i+1, sp.doc.URL, sp.start_line, state)
       return False
       
-    @inputcmd(_breakpointcmds, ConsoleKey.X)
-    def _bp_delete(self, keyinfo):
+    @inputcmd(_breakpointcmds, ConsoleKey.E)
+    def _bp_enable(self, keyinfo):
       try:
         bp_num = int(Console.ReadLine())
-        for i, bp in enumerate(self.active_appdomain.Breakpoints): 
+        for i, bp in enumerate(self.breakpoints): 
           if i+1 == bp_num:
-            #CorAppDomain.Breakpoints only iterates over *Active* breakpoints
-            #to support Active and Deactive BPs, I'll need to keep my own list
-            #for now, treat BP deactivate as BP Delete
-            bp.Activate(False)
-            print "\nBreakpoint %d Deleted" % bp_num
+            bp.Activate(True)
+            print "\nBreakpoint %d Enabled" % bp_num
             return False
         raise Exception, "Breakpoint %d not found" % bp_num
         
       except Exception, msg:
-        with CC.Red: print "Delete breakpoint Failed", msg
+        with CC.Red: print "Enable breakpoint Failed", msg
+      return False      
+      
+    @inputcmd(_breakpointcmds, ConsoleKey.D)
+    def _bp_disable(self, keyinfo):
+      try:
+        bp_num = int(Console.ReadLine())
+        for i, bp in enumerate(self.breakpoints): 
+          if i+1 == bp_num:
+            bp.Activate(False)
+            print "\nBreakpoint %d Disabled" % bp_num
+            return False
+        raise Exception, "Breakpoint %d not found" % bp_num
+        
+      except Exception, msg:
+        with CC.Red: print "Disable breakpoint Failed", msg
       return False      
       
     @inputcmd(_inputcmds, ConsoleKey.B)
@@ -537,6 +551,7 @@ class IPyDebugProcess(object):
             self.initial_breakpoint = create_breakpoint(e.Module, self.py_file, 1)
             if self.initial_breakpoint != None:
               self.initial_breakpoint.Activate(True)
+              self.breakpoints.append(self.initial_breakpoint)
 
     def OnBreakpoint(self, sender,e):
         method_info =  e.Thread.ActiveFrame.Function.GetMethodInfo()
