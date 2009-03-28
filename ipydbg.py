@@ -314,29 +314,26 @@ class IPyDebugProcess(object):
     
     @inputcmd(_inputcmds, ConsoleKey.R)
     def _input_repl_cmd(self, keyinfo):
-
-      print 
-      repl_locals = {'self': self}
       with CC.Gray:
-        print "REPL Console"
+        print "\nREPL Console\nPress Ctl-Z to Exit"
         cmd = ""
+        _locals = {'self': self}
+
         while True:
-          Console.Write("REPL>>>" if not cmd else "...")
+          Console.Write(">>>" if not cmd else "...")
           
           line = Console.ReadLine()
-          if not line and not cmd:
+          if line == None:
             break
           
-          try:
-            if line:
-              cmd = cmd + line + "\n"
-            else:
-              code = compile(cmd, "<input>", "single")
-              if code != None:
-                exec code in globals(), repl_locals
-                cmd = ""
-          except Exception, ex:
-            with CC.Red: print type(ex), ex
+          if line:
+            cmd = cmd + line + "\n"
+          else:
+            try:
+              if len(cmd) > 0:
+                exec compile(cmd, "<input>", "single") in globals(),_locals
+            except Exception, ex:
+              with CC.Red: print type(ex), ex
             cmd = ""
             
     @inputcmd(_inputcmds, ConsoleKey.Spacebar)
