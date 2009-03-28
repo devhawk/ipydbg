@@ -173,19 +173,35 @@ def get_locals(frame, scope=None, offset = None, show_hidden_locals = False):
       if s.StartOffset <= offset and s.EndOffset >= offset:
         for ret in get_locals(frame, s, offset, show_hidden_locals): yield ret
 
-_generic_element_types = [ ELEMENT_TYPE_BOOLEAN,
-     ELEMENT_TYPE_I1, ELEMENT_TYPE_U1,
-     ELEMENT_TYPE_I2, ELEMENT_TYPE_U2,
-     ELEMENT_TYPE_I4, ELEMENT_TYPE_U4,
-     ELEMENT_TYPE_I, ELEMENT_TYPE_U,                  
-     ELEMENT_TYPE_I8, ELEMENT_TYPE_U8,
-     ELEMENT_TYPE_R4, ELEMENT_TYPE_R8,
-     ELEMENT_TYPE_CHAR ]
-     
+_type_map = { 
+  'System.Boolean': ELEMENT_TYPE_BOOLEAN,
+  'System.SByte'  : ELEMENT_TYPE_I1, 
+  'System.Byte'   : ELEMENT_TYPE_U1,
+  'System.Int16'  : ELEMENT_TYPE_I2, 
+  'System.UInt16' : ELEMENT_TYPE_U2,
+  'System.Int32'  : ELEMENT_TYPE_I4,
+  'System.UInt32' : ELEMENT_TYPE_U4,
+  'System.IntPtr' : ELEMENT_TYPE_I, 
+  'System.UIntPtr': ELEMENT_TYPE_U,                  
+  'System.Int64'  : ELEMENT_TYPE_I8, 
+  'System.UInt64' : ELEMENT_TYPE_U8,
+  'System.Single' : ELEMENT_TYPE_R4,
+  'System.Double' : ELEMENT_TYPE_R8,
+  'System.Char'   : ELEMENT_TYPE_CHAR, }
+  
+_generic_element_types = _type_map.values()
+
+
+class NullCorValue(object):
+  def __init__(self, typename):
+    self.typename = typename
+    
 def extract_value(value):
     rv = value.CastToReferenceValue()
     if rv != None:
-      if rv.IsNull: return rv
+      if rv.IsNull: 
+        typename = rv.ExactType.Class.GetTypeInfo().Name
+        return NullCorValue(typename)
       return extract_value(rv.Dereference())
     bv = value.CastToBoxValue()
     if bv != None:
@@ -195,10 +211,18 @@ def extract_value(value):
       return value.CastToGenericValue().GetValue()
     elif value.Type == ELEMENT_TYPE_STRING:
       return value.CastToStringValue().String
-    elif value.Type in [ELEMENT_TYPE_CLASS, ELEMENT_TYPE_VALUETYPE, ELEMENT_TYPE_OBJECT]:
+    elif value.Type == ELEMENT_TYPE_VALUETYPE:
+      typename = value.ExactType.Class.GetTypeInfo().Name 
+      if typename in _type_map:
+        gv = value.CastToGenericValue()
+        return gv.UnsafeGetValueAsType(_type_map[typename])
+      else:
+        return value.CastToObjectValue()
+    elif value.Type in [ELEMENT_TYPE_CLASS, ELEMENT_TYPE_OBJECT]:
       return value.CastToObjectValue()
     else:
-      raise "<processing CorValue of type: %s not implemented>" % str(value.Type)
+      raise (Exception,
+        "<processing CorValue of type: %s not implemented>" % str(value.Type))
   
 #--------------------------------------------
 # main IPyDebugProcess class
@@ -293,16 +317,15 @@ class IPyDebugProcess(object):
         with CC.Magenta: print "  ", name, 
 
         if type(value) == CorObjectValue:
-          print "<CorObjectValue>",
-          with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
-        elif type(value) == CorValue:
-          print "<CorValue>",
-          with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
-        elif type(value) == CorReferenceValue:
-          print None if value.IsNull else "<CorReferenceValue>",
-          with CC.Green: print value.ExactType.Class.GetTypeInfo().FullName
+          print "<...>",
+          with CC.Green: 
+            print value.ExactType.Class.GetTypeInfo().FullName
+        elif type(value) == NullCorValue:
+          print "<None>",
+          with CC.Green: 
+            print value.typename
         else:
-          print value,
+          print value if type(value) != unicode else '"%s"' % value,
           with CC.Green: print value.GetType().FullName
       else:
         if count == 0:
