@@ -324,30 +324,30 @@ class IPyDebugProcess(object):
       self.process.Stop(0)
       self.process.Terminate(255)
       return True
-     
+
     @inputcmd(_inputcmds, ConsoleKey.L)
     def _input_locals_cmd(self, keyinfo):
+      def print_value(name, value):
+        display, type_name = display_value(extract_value(value))
+        with CC.Magenta: print "  ", name, 
+        print display,
+        with CC.Green: print type_name
+        
       print "\nLocals"
       show_hidden = (keyinfo.Modifiers & ConsoleModifiers.Alt) == ConsoleModifiers.Alt
-      locals = get_locals(self.active_thread.ActiveFrame, show_hidden)
-      args = get_arguments(self.active_thread.ActiveFrame, show_hidden)
+      locals = get_locals(self.active_thread.ActiveFrame, show_hidden = show_hidden)
+      args = get_arguments(self.active_thread.ActiveFrame, show_hidden = show_hidden)
+      
       count = 0
-      for name,value in ((name, extract_value(value)) for name, value in locals):
-        display, type_name = display_value(value)
-        with CC.Magenta: print "  ", name, 
-        print display,
-        with CC.Green: print type_name
+      for name,value in locals:
+        print_value(name, value)
         count+=1
-      for name,value in ((name, extract_value(value)) for name, value in args):
-        display, type_name = display_value(value)
-        with CC.Magenta: print "  ", name, 
-        print display,
-        with CC.Green: print type_name
+      for name,value in args:
+        print_value(name, value)
         count+=1
-      else:
-        if count == 0:
+      
+      if count == 0:
           with CC.Magenta: print "  No Locals Found" 
-      return False
 
     @inputcmd(_inputcmds, ConsoleKey.T)
     def _input_stack_trace_cmd(self, keyinfo):
