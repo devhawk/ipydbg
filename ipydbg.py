@@ -223,7 +223,17 @@ def extract_value(value):
     else:
       raise (Exception,
         "<processing CorValue of type: %s not implemented>" % str(value.Type))
-  
+
+def display_value(value):
+  if type(value) == str:
+    return (('"%s"' % value), 'System.String')
+  elif type(value) == CorObjectValue:
+    return ("<...>", value.ExactType.Class.GetTypeInfo().FullName)
+  elif type(value) == NullCorValue:
+    return ("<None>", value.typename)
+  else:
+    return (str(value), value.GetType().FullName)
+
 #--------------------------------------------
 # main IPyDebugProcess class
 
@@ -313,20 +323,11 @@ class IPyDebugProcess(object):
       locals = get_locals(self.active_thread.ActiveFrame, show_hidden_locals = show_hidden)
       count = 0
       for name,value in ((name, extract_value(value)) for name, value in locals):
-        count = count + 1
+        display, type_name = display_value(value)
         with CC.Magenta: print "  ", name, 
-
-        if type(value) == CorObjectValue:
-          print "<...>",
-          with CC.Green: 
-            print value.ExactType.Class.GetTypeInfo().FullName
-        elif type(value) == NullCorValue:
-          print "<None>",
-          with CC.Green: 
-            print value.typename
-        else:
-          print value if type(value) != unicode else '"%s"' % value,
-          with CC.Green: print value.GetType().FullName
+        print display,
+        with CC.Green: print type_name
+        count+=1
       else:
         if count == 0:
           with CC.Magenta: print "  No Locals Found" 
