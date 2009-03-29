@@ -68,7 +68,7 @@ def create_breakpoint(module, filename, linenum):
     for doc in reader.GetDocuments():
       if str.Compare(filename, Path.GetFileName(doc.URL), True) == 0:
         linenum = doc.FindClosestLine(linenum)
-        method = module.SymbolReader.GetMethodFromDocumentPosition(doc, linenum, 0)
+        method = reader.GetMethodFromDocumentPosition(doc, linenum, 0)
         function = module.GetFunctionFromToken(method.Token.GetToken())
         
         for sp in get_sequence_points(method):
