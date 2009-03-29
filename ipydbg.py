@@ -447,34 +447,26 @@ class IPyDebugProcess(object):
       
     @inputcmd(_breakpointcmds, ConsoleKey.E)
     def _bp_enable(self, keyinfo):
-      try:
-        bp_num = int(Console.ReadLine())
-        for i, bp in enumerate(self.breakpoints): 
-          if i+1 == bp_num:
-            bp.Activate(True)
-            print "\nBreakpoint %d Enabled" % bp_num
-            return False
-        raise Exception, "Breakpoint %d not found" % bp_num
-        
-      except Exception, msg:
-        with CC.Red: print "Enable breakpoint Failed", msg
-      return False      
+      self._set_bp_status(True)
       
     @inputcmd(_breakpointcmds, ConsoleKey.D)
     def _bp_disable(self, keyinfo):
+      self._set_bp_status(False)
+
+    def _set_bp_status(self, activate):
+      stat = "Enable" if activate else "Disable"
       try:
         bp_num = int(Console.ReadLine())
         for i, bp in enumerate(self.breakpoints): 
           if i+1 == bp_num:
-            bp.Activate(False)
-            print "\nBreakpoint %d Disabled" % bp_num
+            bp.Activate(activate)
+            print "\nBreakpoint %d %sd" % (bp_num, stat)
             return False
         raise Exception, "Breakpoint %d not found" % bp_num
         
       except Exception, msg:
-        with CC.Red: print "Disable breakpoint Failed", msg
-      return False      
-      
+        with CC.Red: print "&s breakpoint Failed %s" % (stat, msg)
+          
     @inputcmd(_inputcmds, ConsoleKey.B)
     def _input_breakpoint(self, keyinfo):
         keyinfo2 = Console.ReadKey()
